@@ -69,7 +69,9 @@ Eingerichtet (Stand 30.09.2026):
    bei Verdacht in der GCP-Konsole löschen und neu erzeugen.
 3. In GTM die E-Mail des Service Accounts hinzufügen:
    - Konto: **Lesen** (Admin ist nicht nötig)
-   - Container: **Bearbeiten** (nicht „Genehmigen“, nicht „Veröffentlichen“)
+   - Container: **Bearbeiten** und **Freigeben** (nicht „Veröffentlichen“). „Freigeben“ heißt in GTM „Kann
+     Containerversionen erstellen“ und wird für `create_version` gebraucht; mit nur „Bearbeiten“ antwortet
+     GTM mit 404 „Not found or permission denied“.
    - nur Container eintragen, an denen gearbeitet wird
 4. Test-Container „Kicktemp Sandbox“ anlegen und dem Service Account zuweisen.
 
@@ -171,14 +173,15 @@ Bereits ohne Google-Zugang geprüft (laufendes Docker-Image bzw. der lokal gebau
 - [x] `audit.jsonl` hat Modus 0600 und gehört UID 65532
 
 Mit dem echten Service Account (das Skript ohne `WRITE=1` ist gegen `GTM-TNZ2LC8` gelaufen, 32 Prüfungen
-bestanden; die Schreibschritte sind noch offen):
+bestanden, mit `WRITE=1` alle 42):
 
 - [x] Container, Workspaces, Tags, Trigger, Variablen lesen; `list_containers` zeigt nur die Sandbox
 - [x] Fremde Container-ID, Pfad-Traversal, Custom-HTML-Tag und `jsm`-Variable werden abgelehnt
-- [ ] Tag im Workspace anlegen (z. B. GA4-Event), ändern, `create_version` ausführen (`WRITE=1`)
+- [x] Tag im Workspace anlegen (GA4-Event), ändern, `create_version` ausführen (`WRITE=1`, Workspace `kt-acceptance-20260930-172144`; erst nach dem Recht „Freigeben“ erfolgreich)
 - [ ] Publish-Tool ist nicht vorhanden; ein direkter API-Publish mit dem SA scheitert an den GTM-Rechten
 - [ ] Container außerhalb der Liste (echte zweite Container-ID, z. B. Androklinik) wird abgelehnt
-- [ ] `audit.jsonl` enthält `start` und `end` für jede Schreibaktion, mit `fingerprint_before`/`_after` (`WRITE=1` prüft das)
+- [x] `audit.jsonl` enthält `start` und `end` für jede Schreibaktion, mit `fingerprint_before`/`_after` und `api_calls`
+- [x] Damit sind alle 42 Prüfungen des Skripts mit `WRITE=1` bestanden
 - [ ] Beim Start mit falscher Public ID in `KT_ALLOWED_CONTAINERS`: Abbruch mit Fehlermeldung
 
 ## 6. Upstream-Updates
