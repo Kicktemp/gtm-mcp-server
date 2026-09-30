@@ -28,6 +28,11 @@ var llmsTxt string
 const serverName = "gtm-mcp-server"
 
 func main() {
+	// `gtm-mcp-server -healthcheck` probes /health (Docker HEALTHCHECK without wget).
+	if len(os.Args) == 2 && os.Args[1] == "-healthcheck" {
+		os.Exit(runHealthcheck())
+	}
+
 	// Set up structured logging to stderr (stdout is reserved for MCP in stdio mode)
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -272,7 +277,10 @@ func main() {
 	}
 
 	// Create HTTP server
-	addr := fmt.Sprintf(":%d", cfg.Port)
+	addr := kt.ListenAddress(cfg.Port)
+	if kicktemp.ListensPublicly(addr) {
+		logger.Warn("listening beyond loopback: only do this inside a container or behind a trusted proxy", "addr", addr)
+	}
 	httpServer := &http.Server{
 		Addr:              addr,
 		Handler:           kt.RouteGuard(mux),
@@ -371,4 +379,21 @@ func registerUtilityTools(server *mcp.Server) {
 		}
 		return nil, output, nil
 	})
+}
+
+// runHealthcheck probes the server configured through the same environment.
+func runHealthcheck() int {
+	cfg, err := config.Load()
+	if err != nil {
+		return 1
+	}
+	kt, err := kicktemp.Load(os.Getenv)
+	if err != nil {
+		return 1
+	}
+	if err := kicktemp.Healthcheck(kt.ListenAddress(cfg.Port)); err != nil {
+		fmt.Fprintln(os.Stderr, "unhealthy:", err)
+		return 1
+	}
+	return 0
 }

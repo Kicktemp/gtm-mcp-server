@@ -264,3 +264,12 @@ func TestParseContainers(t *testing.T) {
 		}
 	}
 }
+
+func TestAllowlistEmptyNeedsNoGTMRequests(t *testing.T) {
+	// With nothing allowed, Init must succeed without credentials and without
+	// any GTM request (a nil token source would otherwise be lazy mode).
+	a := kicktemp.NewAllowlist(&kicktemp.Config{})
+	if err := a.Init(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+}

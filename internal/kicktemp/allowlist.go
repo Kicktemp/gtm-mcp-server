@@ -63,6 +63,13 @@ func (a *Allowlist) Init(ctx context.Context, sa oauth2.TokenSource) error {
 	if a.all {
 		return nil
 	}
+	if len(a.public) == 0 {
+		// Nothing is allowed, so there is nothing to resolve (and no GTM request to make).
+		a.mu.Lock()
+		a.byKey, a.accounts, a.loaded = map[string]string{}, map[string]bool{}, true
+		a.mu.Unlock()
+		return nil
+	}
 	if sa == nil {
 		a.lazy = true
 		a.listerForCx = func(ctx context.Context) (Lister, error) { return gtm.ClientFromContext(ctx) }

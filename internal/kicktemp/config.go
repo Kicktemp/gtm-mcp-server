@@ -5,6 +5,7 @@ package kicktemp
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"strconv"
 	"strings"
@@ -34,6 +35,10 @@ type Config struct {
 	// AllowedEmails lists the Google accounts that may log in when OAuth is
 	// enabled (KT_ALLOWED_EMAILS, lower-cased). Empty means OAuth is refused.
 	AllowedEmails []string
+
+	// ListenAddr is the HTTP listen address (KT_LISTEN_ADDR). Empty means
+	// 127.0.0.1 on the upstream PORT.
+	ListenAddr string
 
 	// ServiceAccountKeyFile is a file holding the service-account JSON key
 	// (GOOGLE_SERVICE_ACCOUNT_KEY_FILE), e.g. a Docker secret.
@@ -73,6 +78,13 @@ func Load(getenv func(string) string) (*Config, error) {
 			return nil, fmt.Errorf("KT_ALLOWED_EMAILS: %q is not an email address", e)
 		}
 		cfg.AllowedEmails = append(cfg.AllowedEmails, e)
+	}
+	if cfg.ListenAddr = strings.TrimSpace(getenv("KT_LISTEN_ADDR")); cfg.ListenAddr != "" {
+		if _, port, err := net.SplitHostPort(cfg.ListenAddr); err != nil {
+			return nil, fmt.Errorf("KT_LISTEN_ADDR: %q is not host:port: %w", cfg.ListenAddr, err)
+		} else if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
+			return nil, fmt.Errorf("KT_LISTEN_ADDR: invalid port in %q", cfg.ListenAddr)
+		}
 	}
 	cfg.ServiceAccountKeyFile = strings.TrimSpace(getenv("GOOGLE_SERVICE_ACCOUNT_KEY_FILE"))
 	cfg.AuditLogPath = strings.TrimSpace(getenv("KT_AUDIT_LOG_PATH"))
@@ -121,4 +133,29 @@ func envBool(getenv func(string) string, key string, def bool) (bool, error) {
 		return false, fmt.Errorf("%s: invalid boolean %q", key, v)
 	}
 	return b, nil
+}
+
+// ListenAddress returns the address to bind: KT_LISTEN_ADDR, or loopback on
+// the given upstream port. The upstream default (all interfaces) is never used.
+func (c *Config) ListenAddress(port int) string {
+	if c.ListenAddr != "" {
+		return c.ListenAddr
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+}
+
+// ListensPublicly reports whether addr binds beyond the loopback interface.
+func ListensPublicly(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return true
+	}
+	if host == "" {
+		return true
+	}
+	if host == "localhost" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip == nil || !ip.IsLoopback()
 }
