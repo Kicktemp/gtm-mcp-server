@@ -45,7 +45,8 @@ type Record struct {
 	FingerprintAfter  string          `json:"fingerprint_after,omitempty"`
 	Args              json.RawMessage `json:"args,omitempty"`
 	ArgsTruncated     bool            `json:"args_truncated,omitempty"`
-	Result            string          `json:"result,omitempty"` // ok | error
+	APICalls          *int64          `json:"api_calls,omitempty"` // GTM requests of this call (end line)
+	Result            string          `json:"result,omitempty"`    // ok | error
 	Error             string          `json:"error,omitempty"`
 }
 
@@ -176,8 +177,9 @@ func (a *Audit) Begin(ctx context.Context, req mcp.Request, call *toolCall, allo
 }
 
 // End writes the result line of a call started with Begin.
-func (a *Audit) End(p *pending, res mcp.Result, callErr error) {
+func (a *Audit) End(p *pending, res mcp.Result, callErr error, apiCalls int64) {
 	rec := p.rec
+	rec.APICalls = &apiCalls
 	rec.Event = "end"
 	rec.Args, rec.ArgsTruncated, rec.FingerprintBefore = nil, false, ""
 	switch {

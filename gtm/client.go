@@ -26,6 +26,11 @@ func NewClient(ctx context.Context, tokenSource oauth2.TokenSource) (*Client, er
 
 	// Kicktemp fork: the upstream GTM_DEBUG HTTP body dump was removed. It wrote
 	// complete GTM request/response bodies to the log; nothing here logs traffic.
+	if TransportWrapper != nil {
+		httpClient := oauth2.NewClient(ctx, tokenSource)
+		httpClient.Transport = TransportWrapper(httpClient.Transport)
+		opts = []option.ClientOption{option.WithHTTPClient(httpClient)}
+	}
 
 	service, err := tagmanager.NewService(ctx, opts...)
 	if err != nil {

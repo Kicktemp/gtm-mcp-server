@@ -21,6 +21,8 @@ Alle Änderungen liegen in `internal/kicktemp/`; Upstream-Dateien haben nur klei
 | `KT_OAUTH_ENABLED` | `false` | Aus: keine OAuth-Routen, Google-Client-Variablen werden ignoriert. |
 | `KT_ALLOWED_EMAILS` | leer | Nur bei OAuth: erlaubte Google-Konten. OAuth ohne diese Liste startet nicht. |
 | `GOOGLE_SERVICE_ACCOUNT_KEY_FILE` | – | Pfad zum SA-Key (Docker Secret). Nicht zusammen mit `GOOGLE_SERVICE_ACCOUNT_KEY_JSON`. |
+| `KT_GTM_QPM` | `25` | Obergrenze für GTM-API-Requests pro Minute, prozessweit (siehe „Kontingente“). |
+| `KT_GTM_MAX_WAIT` | `60s` | So lange darf ein Request auf einen freien Platz warten. Danach schlägt der Tool-Aufruf mit „rate limited, retry later“ fehl. |
 | `KT_LISTEN_ADDR` | `127.0.0.1:8080` | Im Container `0.0.0.0:8080` (Dockerfile), der Port wird nur auf `127.0.0.1` veröffentlicht. |
 
 Zusätzlich:
@@ -38,7 +40,8 @@ Pro nicht-lesendem Tool-Aufruf zwei Zeilen mit gleicher `call_id`:
 - `start`: vor dem Aufruf. Enthält Tool, Kategorie, Account, Container, `publicId`, Workspace, Entität,
   `fingerprint_before`, `identity` und `args` (Secrets als `[redacted]`, maximal 16 KB, sonst
   `args_truncated`). Kann die Zeile nicht geschrieben werden, wird der Aufruf abgelehnt.
-- `end`: `result` (`ok`/`error`), `fingerprint_after`, Fehlertext.
+- `end`: `result` (`ok`/`error`), `fingerprint_after`, `api_calls` (Anzahl GTM-Requests dieses Aufrufs,
+  inklusive `fingerprint_before` und Typ-Nachschlagen), Fehlertext.
 
 Abgelehnte Aufrufe erzeugen eine `denied`-Zeile. `identity` ist `service-account`, `email:<konto>` (OAuth)
 oder ein Token-Fingerprint.
@@ -61,6 +64,32 @@ docker run --rm -v gtm-mcp-server_gtm-data:/data alpine:3.21 cat /data/audit.jso
 
 Zwei Sicherheitsnetze sind unabhängig voneinander: der Server registriert keine Publish-Tools, und der
 Service Account darf in GTM nicht veröffentlichen.
+
+## Kontingente
+
+Tag Manager API im Projekt `kicktemp-gtm-mcp` (Stand 30.09.2026):
+
+| Kontingent | Wert |
+|---|---|
+| Queries per day | 20.000 |
+| Queries per minute | 30 |
+| Queries per minute per user | 30 (der Service Account zählt als ein Nutzer) |
+
+Der Server begrenzt alle ausgehenden GTM-Requests auf `KT_GTM_QPM` (Default 25, also 5 Puffer zu den 30). Das
+gilt prozessweit für Tool-Aufrufe, `fingerprint_before`, Typ-Prüfung und die Container-Zuordnung beim Start.
+
+- Umgesetzt ist ein **gleitendes Fenster**: in keiner Minute gehen mehr als 25 Requests raus. Ein klassischer
+  Token-Bucket mit Burst 25 könnte in einer Minute bis zu 50 senden (Burst plus Nachfüllen) und das Limit
+  von 30 reißen.
+- Ist das Fenster voll, wartet der Request (höchstens `KT_GTM_MAX_WAIT`). Würde er länger warten, schlägt er
+  sofort mit „rate limited, retry later“ fehl, ohne zu schlafen.
+- Das vorhandene Backoff bei HTTP 429 bleibt als zweite Stufe; jeder Wiederholungsversuch zählt wieder
+  gegen das Limit.
+- Token-Abrufe bei `oauth2.googleapis.com` zählen nicht zum GTM-Kontingent und sind ausgenommen.
+- Das Tageslimit (20.000) wird nicht durchgesetzt. Bei 25/Minute wären es rechnerisch bis zu 36.000 pro Tag;
+  wer den Server dauerhaft auslastet, sollte `KT_GTM_QPM` senken oder `api_calls` im Audit-Log auswerten.
+- `api_calls` zählt nur Requests, die den Aufruf-Kontext tragen. Das ist bei allen upstream-Tools der Fall
+  (`.Context(ctx)`); ein Request ohne Kontext wird trotzdem begrenzt, nur nicht dem Aufruf zugeordnet.
 
 ## 3. Lokal starten
 

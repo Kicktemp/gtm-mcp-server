@@ -178,6 +178,9 @@ func main() {
 		logger.Info("s2s_mode_enabled", "credential_source", credSource)
 	}
 
+	// Process-wide cap on GTM API requests (also covers the allowlist lookup below).
+	gtm.TransportWrapper = kicktemp.NewLimiter(kt.GTMQPM, kt.GTMMaxWait).Wrap
+
 	// Resolve KT_ALLOWED_CONTAINERS to account/container IDs once (needs the service account).
 	if err := allow.Init(context.Background(), saTokenSource); err != nil {
 		logger.Error("container allowlist failed", "error", err)

@@ -134,6 +134,8 @@ func (g *Gate) Middleware() mcp.Middleware {
 						return denied(err), nil
 					}
 				}
+				// Count the GTM requests of this call, including fingerprint_before and type lookups.
+				ctx, calls := withCallCounter(ctx)
 				var started *pending
 				if g.audit != nil && info.Category != CategoryRead {
 					var err error
@@ -146,7 +148,7 @@ func (g *Gate) Middleware() mcp.Middleware {
 					res, err = a(ctx, call, res, err)
 				}
 				if started != nil {
-					g.audit.End(started, res, err)
+					g.audit.End(started, res, err, calls.Load())
 				}
 				if g.ents != nil && err == nil {
 					g.ents.Observe(res)

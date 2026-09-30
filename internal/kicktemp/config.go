@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config is the Kicktemp-specific configuration (KT_* environment variables).
@@ -47,6 +48,12 @@ type Config struct {
 	// ServiceAccountKeyFile is a file holding the service-account JSON key
 	// (GOOGLE_SERVICE_ACCOUNT_KEY_FILE), e.g. a Docker secret.
 	ServiceAccountKeyFile string
+
+	// GTMQPM caps GTM API requests per minute, process-wide (KT_GTM_QPM).
+	GTMQPM int
+	// GTMMaxWait is how long a request may wait for a free slot before the
+	// tool call fails with "rate limited, retry later" (KT_GTM_MAX_WAIT).
+	GTMMaxWait time.Duration
 
 	// AuditLogPath is the JSON Lines audit log (KT_AUDIT_LOG_PATH). It cannot
 	// be switched off: the server refuses to start if it is not writable.
@@ -94,6 +101,18 @@ func Load(getenv func(string) string) (*Config, error) {
 		}
 	}
 	cfg.ServiceAccountKeyFile = strings.TrimSpace(getenv("GOOGLE_SERVICE_ACCOUNT_KEY_FILE"))
+	cfg.GTMQPM = 25
+	if v := strings.TrimSpace(getenv("KT_GTM_QPM")); v != "" {
+		if cfg.GTMQPM, err = strconv.Atoi(v); err != nil || cfg.GTMQPM < 1 {
+			return nil, fmt.Errorf("KT_GTM_QPM: %q is not a positive integer", v)
+		}
+	}
+	cfg.GTMMaxWait = 60 * time.Second
+	if v := strings.TrimSpace(getenv("KT_GTM_MAX_WAIT")); v != "" {
+		if cfg.GTMMaxWait, err = time.ParseDuration(v); err != nil || cfg.GTMMaxWait < 0 {
+			return nil, fmt.Errorf("KT_GTM_MAX_WAIT: %q is not a duration like 60s", v)
+		}
+	}
 	cfg.AuditLogPath = strings.TrimSpace(getenv("KT_AUDIT_LOG_PATH"))
 	if cfg.AuditLogPath == "" {
 		cfg.AuditLogPath = "/data/audit.jsonl"

@@ -209,6 +209,7 @@ Die Werte gelten so wie implementiert und sind durch Tests belegt (`TestAllowlis
 | H7 | Listen-Adresse, `-healthcheck` | erledigt, getestet |
 | H8 | `GTM_DEBUG`-Body-Dump entfernt, Log-Leak-Tests | erledigt, Regressionstest schlägt auf altem Code fehl |
 | H9 | Code-Gate (`KT_ALLOW_CUSTOM_CODE`) | erledigt, getestet |
+| H10 | Rate-Limiter `KT_GTM_QPM` (gleitendes Fenster), `api_calls` im Audit-Log | erledigt, getestet mit Fake-Clock |
 | Docker | distroless nonroot, Digests gepinnt, Compose | erledigt, Image gebaut und geprüft |
 | CI | `release.yml` (SSH-Deploy) und `security.yml` gelöscht, `ci.yml` neu | erledigt, **noch nicht auf GitHub gelaufen** |
 
