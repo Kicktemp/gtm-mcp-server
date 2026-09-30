@@ -61,7 +61,7 @@ Eingerichtet (Stand 30.09.2026):
 | Service Account | `gtm-mcp@kicktemp-gtm-mcp.iam.gserviceaccount.com` |
 | GTM-Konto | Kicktemp GmbH (`6001479822`) |
 | Sandbox für Abnahmetests | „KCM Test“, `GTM-TNZ2LC8` (Container-ID `38459368`) |
-| Weiterer Container, erst nach bestandener Abnahme | Androklinik `GTM-KVGB2N5L` |
+| Produktiv freigeschaltet (30.09.2026) | Androklinik `GTM-KVGB2N5L` (Container-ID `246662472`, GTM-Konto PKAR `3588745330`) |
 
 1. GCP-Projekt „kicktemp-gtm-mcp“ anlegen, **Tag Manager API** aktivieren.
 2. Service Account anlegen, JSON-Key erzeugen und als `secrets/gtm-sa.json` ablegen (`secrets/` ist in
@@ -114,8 +114,10 @@ docker compose ps          # Status "healthy"
 docker compose logs -f
 ```
 
-`KT_ALLOWED_CONTAINERS` steht in `docker-compose.yml` und ist auf die Sandbox `GTM-TNZ2LC8` gesetzt. Um
-`GTM-KVGB2N5L` freizuschalten, dort eintragen (`"GTM-TNZ2LC8,GTM-KVGB2N5L"`), erst nach bestandener Abnahme.
+`KT_ALLOWED_CONTAINERS` steht in `docker-compose.yml`: `"GTM-TNZ2LC8,GTM-KVGB2N5L"` (Sandbox und
+Androklinik). Ein weiterer Container braucht zwei Schritte: den SA in GTM berechtigen (Bearbeiten und Freigeben,
+nicht Veröffentlichen) und die Public ID dort eintragen. Ist der SA nicht berechtigt, startet der Server nicht
+(`unknown or inaccessible container(s)`).
 
 Nach Änderungen an der Container-Liste in GTM oder in `KT_ALLOWED_CONTAINERS`: `docker compose up -d`
 (Neustart). Die Zuordnung Public ID → Container-ID wird nur beim Start gelesen.

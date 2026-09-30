@@ -15,7 +15,7 @@ services:
       KT_ALLOW_DELETE: "false"
       KT_ALLOW_ADMIN: "false"
       KT_ALLOW_CUSTOM_CODE: "false"
-      KT_ALLOWED_CONTAINERS: "GTM-TNZ2LC8" # sandbox; GTM-KVGB2N5L (Androklinik) only after acceptance
+      KT_ALLOWED_CONTAINERS: "GTM-TNZ2LC8,GTM-KVGB2N5L" # KCM Test (sandbox) + Androklinik
       GOOGLE_SERVICE_ACCOUNT_KEY_FILE: /run/secrets/gtm_sa
       TOKEN_STORE_PATH: /data/tokens.json
       KT_AUDIT_LOG_PATH: /data/audit.jsonl

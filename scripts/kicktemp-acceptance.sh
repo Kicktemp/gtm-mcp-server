@@ -12,6 +12,8 @@ cd "$(dirname "$0")/.."
 
 BASE=${BASE:-http://127.0.0.1:8080}
 SANDBOX=${SANDBOX:-GTM-TNZ2LC8}
+# Alle Container, die list_containers zeigen darf (= KT_ALLOWED_CONTAINERS in docker-compose.yml)
+EXPECTED=${EXPECTED:-GTM-TNZ2LC8,GTM-KVGB2N5L}
 KEY=$(grep '^SERVICE_ACCOUNT_API_KEY=' .env | cut -d= -f2-)
 [ -n "$KEY" ] || { echo "SERVICE_ACCOUNT_API_KEY missing in .env"; exit 2; }
 
@@ -66,12 +68,21 @@ done
 
 # --- 3. Lesen ----------------------------------------------------------------
 section "Lesen: Account, Container, Workspaces, Tags, Trigger, Variablen"
-OUT=$(tool list_accounts '{}');                    ACCOUNT=$(jget "$OUT" 'd["accounts"][0]["accountId"]'); RC=$?
-echo "  Account $ACCOUNT ($(jget "$OUT" 'len(d["accounts"])') sichtbar)"
-OUT=$(tool list_containers "{\"accountId\":\"$ACCOUNT\"}"); RC=$?
-PUBLIC=$(jget "$OUT" '",".join(c["publicId"] for c in d["containers"])')
-check "list_containers zeigt nur den Sandbox-Container (Allowlist-Filter)" "$PUBLIC" "$SANDBOX"
-CONTAINER=$(jget "$OUT" 'd["containers"][0]["containerId"]')
+OUT=$(tool list_accounts '{}'); RC=$?
+[ $RC = 0 ] && ok "list_accounts" || bad "list_accounts" "$OUT"
+echo "  $(jget "$OUT" 'len(d["accounts"])') Account(s) sichtbar"
+VISIBLE=""; ACCOUNT=""; CONTAINER=""
+for A in $(jget "$OUT" '" ".join(a["accountId"] for a in d["accounts"])'); do
+  C=$(tool list_containers "{\"accountId\":\"$A\"}")
+  VISIBLE="$VISIBLE $(jget "$C" '" ".join(c["publicId"] for c in d["containers"])')"
+  ID=$(jget "$C" 'next((c["containerId"] for c in d["containers"] if c["publicId"]=="'$SANDBOX'"), "")')
+  [ -n "$ID" ] && { ACCOUNT=$A; CONTAINER=$ID; }
+done
+GOT=$(printf '%s\n' $VISIBLE | sort | tr '\n' ',' | sed 's/,$//')
+WANT=$(printf '%s\n' ${EXPECTED//,/ } | sort | tr '\n' ',' | sed 's/,$//')
+check "list_containers zeigt genau die erlaubten Container (Allowlist-Filter)" "$GOT" "$WANT"
+[ -n "$CONTAINER" ] || { bad "Sandbox $SANDBOX gefunden"; exit 1; }
+echo "  Sandbox: Account $ACCOUNT, Container $CONTAINER"
 OUT=$(tool list_workspaces "{\"accountId\":\"$ACCOUNT\",\"containerId\":\"$CONTAINER\"}"); RC=$?
 WS=$(jget "$OUT" 'd["workspaces"][0]["workspaceId"]'); echo "  Container $CONTAINER, erster Workspace $WS"
 [ $RC = 0 ] && ok "list_workspaces" || bad "list_workspaces" "$OUT"
