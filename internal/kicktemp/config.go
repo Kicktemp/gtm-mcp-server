@@ -27,6 +27,10 @@ type Config struct {
 	// written. Empty with AllowAllContainers=false means nothing is allowed.
 	AllowedContainers []string
 
+	// OAuthEnabled switches the OAuth mode (KT_OAUTH_ENABLED). When false, only
+	// the service-account bearer key is accepted and all OAuth routes are gone.
+	OAuthEnabled bool
+
 	// AuditLogPath is the JSON Lines audit log (KT_AUDIT_LOG_PATH). It cannot
 	// be switched off: the server refuses to start if it is not writable.
 	AuditLogPath string
@@ -44,6 +48,9 @@ func Load(getenv func(string) string) (*Config, error) {
 		return nil, err
 	}
 	if cfg.AllowAdmin, err = envBool(getenv, "KT_ALLOW_ADMIN", false); err != nil {
+		return nil, err
+	}
+	if cfg.OAuthEnabled, err = envBool(getenv, "KT_OAUTH_ENABLED", false); err != nil {
 		return nil, err
 	}
 	if cfg.AllowAllContainers, cfg.AllowedContainers, err = parseContainers(getenv("KT_ALLOWED_CONTAINERS")); err != nil {

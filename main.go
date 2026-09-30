@@ -54,6 +54,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	// OAuth is off unless explicitly enabled: ignore any Google client config then.
+	if !kt.OAuthEnabled && (cfg.GoogleClientID != "" || cfg.GoogleClientSecret != "") {
+		logger.Info("KT_OAUTH_ENABLED=false: ignoring GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET")
+		cfg.GoogleClientID, cfg.GoogleClientSecret = "", ""
+	}
+	if err := kt.CheckAuth(cfg.ServiceAccountAPIKey, cfg.ValidateAuth() == nil); err != nil {
+		logger.Error("invalid authentication configuration", "error", err)
+		os.Exit(1)
+	}
+
 	// Adjust log level
 	if cfg.LogLevel == "debug" {
 		logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
@@ -258,7 +268,7 @@ func main() {
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           kt.RouteGuard(mux),
 		ReadTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 10 * time.Second,
 		WriteTimeout:      0, // Disabled for SSE streams
