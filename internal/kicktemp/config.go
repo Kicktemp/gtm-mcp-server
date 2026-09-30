@@ -5,6 +5,7 @@ package kicktemp
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -19,6 +20,12 @@ type Config struct {
 	AllowDelete bool
 	// AllowAdmin enables the admin category (KT_ALLOW_ADMIN).
 	AllowAdmin bool
+
+	// AllowAllContainers is true when KT_ALLOWED_CONTAINERS is "*".
+	AllowAllContainers bool
+	// AllowedContainers lists the public IDs (GTM-XXXX) that may be read and
+	// written. Empty with AllowAllContainers=false means nothing is allowed.
+	AllowedContainers []string
 }
 
 // Load reads the Kicktemp configuration through getenv (os.Getenv in
@@ -35,7 +42,39 @@ func Load(getenv func(string) string) (*Config, error) {
 	if cfg.AllowAdmin, err = envBool(getenv, "KT_ALLOW_ADMIN", false); err != nil {
 		return nil, err
 	}
+	if cfg.AllowAllContainers, cfg.AllowedContainers, err = parseContainers(getenv("KT_ALLOWED_CONTAINERS")); err != nil {
+		return nil, err
+	}
 	return cfg, nil
+}
+
+var publicIDPattern = regexp.MustCompile(`^GTM-[A-Z0-9]{4,20}$`)
+
+// parseContainers parses KT_ALLOWED_CONTAINERS: "" allows nothing, "*" allows
+// everything, otherwise a comma-separated list of container public IDs.
+func parseContainers(raw string) (all bool, ids []string, err error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false, nil, nil
+	}
+	if raw == "*" {
+		return true, nil, nil
+	}
+	seen := map[string]bool{}
+	for _, part := range strings.Split(raw, ",") {
+		id := strings.ToUpper(strings.TrimSpace(part))
+		if id == "" {
+			continue
+		}
+		if !publicIDPattern.MatchString(id) {
+			return false, nil, fmt.Errorf("KT_ALLOWED_CONTAINERS: %q is not a container public ID (GTM-XXXX) or \"*\"", part)
+		}
+		if !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	return false, ids, nil
 }
 
 func envBool(getenv func(string) string, key string, def bool) (bool, error) {

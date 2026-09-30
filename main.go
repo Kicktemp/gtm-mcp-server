@@ -69,7 +69,8 @@ func main() {
 	}, nil)
 
 	// Kicktemp policy first, so the logging middleware (added last = outermost) also sees refusals.
-	server.AddReceivingMiddleware(kicktemp.NewGate(kt).Middleware())
+	allow := kicktemp.NewAllowlist(kt)
+	server.AddReceivingMiddleware(kicktemp.NewGate(kt, allow).Middleware())
 
 	// Add logging middleware
 	server.AddReceivingMiddleware(middleware.NewLoggingMiddleware(logger))
@@ -147,6 +148,12 @@ func main() {
 			credSource = "key_json"
 		}
 		logger.Info("s2s_mode_enabled", "credential_source", credSource)
+	}
+
+	// Resolve KT_ALLOWED_CONTAINERS to account/container IDs once (needs the service account).
+	if err := allow.Init(context.Background(), saTokenSource); err != nil {
+		logger.Error("container allowlist failed", "error", err)
+		os.Exit(1)
 	}
 
 	// Check if OAuth is configured

@@ -29,7 +29,7 @@ func newSession(t *testing.T, cfg *kicktemp.Config, filter bool) *mcp.ClientSess
 	if filter {
 		kicktemp.FilterTools(server, cfg)
 	}
-	server.AddReceivingMiddleware(kicktemp.NewGate(cfg).Middleware())
+	server.AddReceivingMiddleware(kicktemp.NewGate(cfg, kicktemp.NewAllowlist(cfg)).Middleware())
 
 	st, ct := mcp.NewInMemoryTransports()
 	ss, err := server.Connect(ctx, st, nil)
@@ -59,7 +59,7 @@ func listNames(t *testing.T, cs *mcp.ClientSession) map[string]bool {
 }
 
 func TestEveryRegisteredToolIsClassified(t *testing.T) {
-	cs := newSession(t, &kicktemp.Config{AllowPublish: true, AllowDelete: true, AllowAdmin: true}, false)
+	cs := newSession(t, &kicktemp.Config{AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowAllContainers: true}, false)
 	registered := listNames(t, cs)
 	if len(registered) != 94 {
 		t.Fatalf("registered tools = %d, want 94 (update categories.go after upstream changes)", len(registered))
@@ -78,7 +78,7 @@ func TestEveryRegisteredToolIsClassified(t *testing.T) {
 
 func TestDefaultPolicyHidesPublishDeleteAdmin(t *testing.T) {
 	for _, filter := range []bool{true, false} {
-		cs := newSession(t, &kicktemp.Config{}, filter)
+		cs := newSession(t, &kicktemp.Config{AllowAllContainers: true}, filter)
 		names := listNames(t, cs)
 		for _, want := range []string{"list_tags", "create_tag", "update_tag", "create_version"} {
 			if !names[want] {
@@ -106,7 +106,7 @@ func TestDeniedCallIsRefused(t *testing.T) {
 		"some_future_tool_xy": "KT_ALLOW_ADMIN", // unknown tools are admin
 	}
 	for _, filter := range []bool{true, false} {
-		cs := newSession(t, &kicktemp.Config{}, filter)
+		cs := newSession(t, &kicktemp.Config{AllowAllContainers: true}, filter)
 		for tool, flag := range cases {
 			res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: tool, Arguments: map[string]any{}})
 			if err != nil {
@@ -124,7 +124,7 @@ func TestDeniedCallIsRefused(t *testing.T) {
 }
 
 func TestAllowedCategoriesAreListedAndCallable(t *testing.T) {
-	cs := newSession(t, &kicktemp.Config{AllowPublish: true, AllowDelete: true, AllowAdmin: true}, true)
+	cs := newSession(t, &kicktemp.Config{AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowAllContainers: true}, true)
 	names := listNames(t, cs)
 	for _, want := range []string{"publish_version", "delete_tag", "combine_containers"} {
 		if !names[want] {

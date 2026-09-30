@@ -2,7 +2,9 @@ package kicktemp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -52,22 +54,47 @@ func FilterTools(server *mcp.Server, cfg *Config) {
 type toolCall struct {
 	Name string
 	Info ToolInfo
-	Args []byte
+	Args json.RawMessage
+
+	args   map[string]any
+	parsed bool
+	err    error
+}
+
+// Map returns the decoded arguments. Undecodable arguments are an error, so a
+// check never silently skips a call it cannot read.
+func (c *toolCall) Map() (map[string]any, error) {
+	if !c.parsed {
+		c.parsed = true
+		c.args = map[string]any{}
+		if len(c.Args) > 0 {
+			if err := json.Unmarshal(c.Args, &c.args); err != nil {
+				c.err = fmt.Errorf("invalid tool arguments: %w", err)
+			}
+		}
+	}
+	return c.args, c.err
 }
 
 // check is one policy rule. A non-nil error denies the call.
 type check func(ctx context.Context, call *toolCall) error
 
+// after post-processes the result of an allowed call.
+type after func(ctx context.Context, call *toolCall, res mcp.Result, err error) (mcp.Result, error)
+
 // Gate is the receiving middleware that enforces the Kicktemp policy.
 type Gate struct {
 	cfg    *Config
 	checks []check
+	afters []after
+	allow  *Allowlist
 }
 
-// NewGate builds the policy middleware for cfg.
-func NewGate(cfg *Config) *Gate {
-	g := &Gate{cfg: cfg}
-	g.checks = append(g.checks, g.categoryCheck)
+// NewGate builds the policy middleware for cfg and the container allowlist.
+func NewGate(cfg *Config, allow *Allowlist) *Gate {
+	g := &Gate{cfg: cfg, allow: allow}
+	g.checks = append(g.checks, g.categoryCheck, allow.check)
+	g.afters = append(g.afters, allow.after)
 	return g
 }
 
@@ -98,6 +125,17 @@ func (g *Gate) Middleware() mcp.Middleware {
 						return denied(err), nil
 					}
 				}
+				res, err := next(ctx, method, req)
+				for _, a := range g.afters {
+					res, err = a(ctx, call, res, err)
+				}
+				return res, err
+			case "resources/read":
+				if rr, ok := req.(*mcp.ReadResourceRequest); ok {
+					if err := g.allow.checkResource(ctx, rr.Params.URI); err != nil {
+						return nil, err
+					}
+				}
 			case "tools/list":
 				res, err := next(ctx, method, req)
 				if err != nil {
@@ -121,8 +159,12 @@ func (g *Gate) Middleware() mcp.Middleware {
 
 // denied turns a policy error into a tool error result the model can read.
 func denied(err error) *mcp.CallToolResult {
+	msg := err.Error()
+	if !strings.Contains(msg, "Kicktemp policy") {
+		msg = "refused by Kicktemp policy: " + msg
+	}
 	return &mcp.CallToolResult{
 		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
+		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
 	}
 }
