@@ -54,6 +54,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Service-account key from a file (Docker secret) instead of an environment variable.
+	if cfg.ServiceAccountKeyJSON, err = kt.ServiceAccountKey(cfg.ServiceAccountKeyJSON); err != nil {
+		logger.Error("invalid service account key configuration", "error", err)
+		os.Exit(1)
+	}
+
 	// OAuth is off unless explicitly enabled: ignore any Google client config then.
 	if !kt.OAuthEnabled && (cfg.GoogleClientID != "" || cfg.GoogleClientSecret != "") {
 		logger.Info("KT_OAUTH_ENABLED=false: ignoring GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET")

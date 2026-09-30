@@ -35,6 +35,10 @@ type Config struct {
 	// enabled (KT_ALLOWED_EMAILS, lower-cased). Empty means OAuth is refused.
 	AllowedEmails []string
 
+	// ServiceAccountKeyFile is a file holding the service-account JSON key
+	// (GOOGLE_SERVICE_ACCOUNT_KEY_FILE), e.g. a Docker secret.
+	ServiceAccountKeyFile string
+
 	// AuditLogPath is the JSON Lines audit log (KT_AUDIT_LOG_PATH). It cannot
 	// be switched off: the server refuses to start if it is not writable.
 	AuditLogPath string
@@ -70,6 +74,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		}
 		cfg.AllowedEmails = append(cfg.AllowedEmails, e)
 	}
+	cfg.ServiceAccountKeyFile = strings.TrimSpace(getenv("GOOGLE_SERVICE_ACCOUNT_KEY_FILE"))
 	cfg.AuditLogPath = strings.TrimSpace(getenv("KT_AUDIT_LOG_PATH"))
 	if cfg.AuditLogPath == "" {
 		cfg.AuditLogPath = "/data/audit.jsonl"
