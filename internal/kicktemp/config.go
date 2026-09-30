@@ -26,6 +26,10 @@ type Config struct {
 	// AllowedContainers lists the public IDs (GTM-XXXX) that may be read and
 	// written. Empty with AllowAllContainers=false means nothing is allowed.
 	AllowedContainers []string
+
+	// AuditLogPath is the JSON Lines audit log (KT_AUDIT_LOG_PATH). It cannot
+	// be switched off: the server refuses to start if it is not writable.
+	AuditLogPath string
 }
 
 // Load reads the Kicktemp configuration through getenv (os.Getenv in
@@ -44,6 +48,10 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	if cfg.AllowAllContainers, cfg.AllowedContainers, err = parseContainers(getenv("KT_ALLOWED_CONTAINERS")); err != nil {
 		return nil, err
+	}
+	cfg.AuditLogPath = strings.TrimSpace(getenv("KT_AUDIT_LOG_PATH"))
+	if cfg.AuditLogPath == "" {
+		cfg.AuditLogPath = "/data/audit.jsonl"
 	}
 	return cfg, nil
 }

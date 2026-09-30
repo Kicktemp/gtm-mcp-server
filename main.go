@@ -69,8 +69,14 @@ func main() {
 	}, nil)
 
 	// Kicktemp policy first, so the logging middleware (added last = outermost) also sees refusals.
+	audit, err := kicktemp.OpenAudit(kt.AuditLogPath)
+	if err != nil {
+		logger.Error("audit log unavailable", "error", err, "path", kt.AuditLogPath)
+		os.Exit(1)
+	}
+	defer audit.Close()
 	allow := kicktemp.NewAllowlist(kt)
-	server.AddReceivingMiddleware(kicktemp.NewGate(kt, allow).Middleware())
+	server.AddReceivingMiddleware(kicktemp.NewGate(kt, allow, audit, kicktemp.NewEntities()).Middleware())
 
 	// Add logging middleware
 	server.AddReceivingMiddleware(middleware.NewLoggingMiddleware(logger))

@@ -71,7 +71,7 @@ func allowSession(t *testing.T, allowed ...string) *mcp.ClientSession {
 			pub := map[string]string{"GTM-AAAA1": "100", "GTM-BBBB1": "101"}[in.TagID]
 			return nil, fakeLookupOut{Container: gtm.Container{ContainerID: pub, PublicID: in.TagID}}, nil
 		})
-	server.AddReceivingMiddleware(kicktemp.NewGate(cfg, allow).Middleware())
+	server.AddReceivingMiddleware(kicktemp.NewGate(cfg, allow, nil, nil).Middleware())
 
 	st, ct := mcp.NewInMemoryTransports()
 	ss, err := server.Connect(ctx, st, nil)

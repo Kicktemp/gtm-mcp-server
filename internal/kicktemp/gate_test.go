@@ -29,7 +29,7 @@ func newSession(t *testing.T, cfg *kicktemp.Config, filter bool) *mcp.ClientSess
 	if filter {
 		kicktemp.FilterTools(server, cfg)
 	}
-	server.AddReceivingMiddleware(kicktemp.NewGate(cfg, kicktemp.NewAllowlist(cfg)).Middleware())
+	server.AddReceivingMiddleware(kicktemp.NewGate(cfg, kicktemp.NewAllowlist(cfg), nil, nil).Middleware())
 
 	st, ct := mcp.NewInMemoryTransports()
 	ss, err := server.Connect(ctx, st, nil)

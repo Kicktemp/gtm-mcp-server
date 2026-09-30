@@ -88,11 +88,14 @@ type Gate struct {
 	checks []check
 	afters []after
 	allow  *Allowlist
+	audit  *Audit    // nil disables auditing (tests)
+	ents   *Entities // nil disables the entity cache (tests)
 }
 
-// NewGate builds the policy middleware for cfg and the container allowlist.
-func NewGate(cfg *Config, allow *Allowlist) *Gate {
-	g := &Gate{cfg: cfg, allow: allow}
+// NewGate builds the policy middleware for cfg, the container allowlist, the
+// audit log and the entity cache.
+func NewGate(cfg *Config, allow *Allowlist, audit *Audit, ents *Entities) *Gate {
+	g := &Gate{cfg: cfg, allow: allow, audit: audit, ents: ents}
 	g.checks = append(g.checks, g.categoryCheck, allow.check)
 	g.afters = append(g.afters, allow.after)
 	return g
@@ -122,12 +125,31 @@ func (g *Gate) Middleware() mcp.Middleware {
 				call := &toolCall{Name: ctr.Params.Name, Info: info, Args: ctr.Params.Arguments}
 				for _, c := range g.checks {
 					if err := c(ctx, call); err != nil {
+						g.audit.Denied(ctx, req, call, g.allow, err)
 						return denied(err), nil
+					}
+				}
+				var started *pending
+				if g.audit != nil && info.Category != CategoryRead {
+					var err error
+					if started, err = g.audit.Begin(ctx, req, call, g.allow, g.ents); err != nil {
+						return denied(fmt.Errorf("audit log unavailable, refusing to change GTM: %w", err)), nil
 					}
 				}
 				res, err := next(ctx, method, req)
 				for _, a := range g.afters {
 					res, err = a(ctx, call, res, err)
+				}
+				if started != nil {
+					g.audit.End(started, res, err)
+				}
+				if g.ents != nil && err == nil {
+					g.ents.Observe(res)
+					if strings.HasPrefix(call.Name, "delete_") {
+						if ref := targetOf(call.Name, call.args); ref.Path != "" {
+							g.ents.Forget(ref.Path)
+						}
+					}
 				}
 				return res, err
 			case "resources/read":
