@@ -58,8 +58,8 @@ Toolchain für die Analyse: `go1.26.0`. Vollständige Liste: Anhang A.
     `net/textproto`, `net`). Das betrifft den lokalen Compiler, nicht den Code. Der Docker-Build nutzt
     `golang:1.26-alpine` und muss auf einen Digest mit Go ≥ 1.26.6 gepinnt werden (siehe Abschnitt 5).
   - 7 Schwachstellen in importierten Paketen und 7 in Modulen, die der Code nicht aufruft. Darunter
-    `golang.org/x/crypto@v0.55.0` (behoben in v0.56.0, eine ohne Fix). Maßnahme: `go get golang.org/x/crypto@v0.56.0`
-    im Docker-Commit, danach erneut `govulncheck`.
+    `golang.org/x/crypto@v0.55.0` (behoben in v0.56.0, eine ohne Fix). Maßnahme: `x/crypto` auf v0.56.0
+    angehoben (erledigt, Abschnitt 9).
 - Direkte Abhängigkeiten: `godotenv v1.5.1`, `go-sdk v1.7.0`, `uritemplate/v3 v3.0.2`, `oauth2 v0.36.0`,
   `x/time v0.15.0`, `google.golang.org/api v0.297.0`.
 
@@ -181,13 +181,56 @@ aufgebaute Map. `fingerprint_before` (H3) und der Typ-Check (H9) nutzen einen In
 | write/delete/code-Tool, Cache-Miss (update/delete) | 1 GET der Entität |
 | create-Tools | 0 (`fingerprint_before` ist leer) |
 
-(Tatsächliche Werte nach Implementierung in Abschnitt 9 nachgetragen.)
+Die Werte gelten so wie implementiert und sind durch Tests belegt (`TestAllowlistNoExtraRequestsPerCall`,
+`TestAuditFingerprintBeforeFetchesOnlyOnCacheMiss`). Zusätzlich:
+
+- Bei leerem `KT_ALLOWED_CONTAINERS` und bei `*` entstehen beim Start keine GTM-Requests.
+- Der Cache gilt 10 Minuten; danach kostet das nächste `update_*`/`delete_*` auf dieselbe Entität wieder
+  einen GET.
+- Die Typ-Prüfung des Code-Gates (`update_tag`/`update_variable` ohne `type`-Argument) nutzt denselben
+  Cache und kostet höchstens denselben einen GET, nur wenn `KT_ALLOW_CUSTOM_CODE=false` ist.
+- Im OAuth-Modus ohne Service Account (Mittwald) wird die Container-Zuordnung beim ersten Aufruf gebaut
+  (1 + Anzahl Accounts) und höchstens alle 5 Minuten neu geladen, wenn eine unbekannte Container-ID
+  angefragt wird.
 
 ## 9. Ergebnisse nach Implementierung
 
-- Docker-Baseline (`docker build .` auf v1.12.3): **erfolgreich**. Die Vermutung „`.dockerignore` bricht das
+**Stand der Maßnahmen** (ein Commit je Punkt auf `kicktemp/main`):
+
+| Punkt | Maßnahme | Ergebnis |
+|---|---|---|
+| Review | dieses Dokument, `.gitignore`-Ausnahmen | erledigt |
+| H1 | Tool-Gating Publish/Delete/Admin | erledigt, getestet |
+| H2 | Container-Allowlist (`*` = alle, leer = nichts), ID-Prüfung gegen Pfad-Traversal | erledigt, getestet |
+| H3 | Audit-Log (start/end/denied, `args`, Fingerprints) | erledigt, getestet |
+| H4 | OAuth aus, kein Open-Mode, Route-Guard, Key ≥ 32 Byte | erledigt, getestet |
+| H5 | `KT_ALLOWED_EMAILS` (id_token-Prüfung im Callback, Prüfung pro Request) | erledigt, getestet (mit gefaktem id_token; kein echter Google-Login) |
+| H6 | SA-Key aus Datei | erledigt, getestet |
+| H7 | Listen-Adresse, `-healthcheck` | erledigt, getestet |
+| H8 | `GTM_DEBUG`-Body-Dump entfernt, Log-Leak-Tests | erledigt, Regressionstest schlägt auf altem Code fehl |
+| H9 | Code-Gate (`KT_ALLOW_CUSTOM_CODE`) | erledigt, getestet |
+| Docker | distroless nonroot, Digests gepinnt, Compose | erledigt, Image gebaut und geprüft |
+| CI | `release.yml` (SSH-Deploy) und `security.yml` gelöscht, `ci.yml` neu | erledigt, **noch nicht auf GitHub gelaufen** |
+
+**Prüfergebnisse**
+
+- `go test ./...`: alle Pakete grün, auch mit `-race` (`internal/kicktemp`, Root-Paket) und auf Go 1.26.8.
+- Docker-Baseline (`docker build .` auf v1.12.3): erfolgreich. Die Vermutung „`.dockerignore` bricht das
   `go:embed`“ hat sich nicht bestätigt (`*.md` matcht nur auf Root-Ebene).
-- Weitere Ergebnisse (Tests, erneuter `govulncheck`) werden mit den Härtungs-Commits ergänzt.
+- `govulncheck ./...` mit **Go 1.26.8** (Toolchain des Builder-Images): **0 betroffene Schwachstellen**.
+  Übrig bleibt `GO-2026-5932` (`x/crypto/openpgp`, kein Fix verfügbar); das Paket wird nicht aufgerufen.
+  Mit dem lokalen Go 1.26.0 zeigt `govulncheck` weiter die 22 Standardbibliotheks-Meldungen aus Abschnitt 4,
+  weil dieser Compiler veraltet ist (nicht der Code).
+- Laufendes Image (`docker compose up`, Fake-Service-Account ohne Google-Zugang):
+  - Status `healthy`, User `65532:65532`, `ReadonlyRootfs=true`, `CapDrop=ALL`
+  - Port nur `127.0.0.1:8080`
+  - `/health` 200, ohne oder mit falschem Bearer 401, `/authorize` und `/register` 404
+  - `tools/list`: 49 Tools, kein `publish_*`, kein `delete_*`, kein `combine_containers`
+  - `audit.jsonl`: Modus 0600, Owner 65532
+- Nicht geprüft, weil ein echter Service Account nötig ist: die Schritte aus `SETUP.md` Abschnitt 5, zweiter
+  Teil (GTM lesen/schreiben, Publish scheitert an GTM-Rechten, Audit-Zeilen mit echten Fingerprints).
+
+**Offene Punkte / Restrisiken:** siehe `SETUP.md` Abschnitt 7.
 
 ## Anhang A: `go list -m all` (Stand v1.12.3)
 
