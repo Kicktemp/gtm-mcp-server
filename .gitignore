@@ -13,7 +13,8 @@ go-sdk-main/
 !.goreleaser.yaml
 
 # Local docs / specs
-/docs/
+/docs/*
+!/docs/kicktemp/
 /planning/
 
 # Build artifacts
@@ -36,3 +37,9 @@ docker-compose.yml
 
 # MCP Registry tokens
 .mcpregistry_*
+
+# Kicktemp fork: tracked docs and deployment templates
+!/docs/kicktemp/*.md
+!docker-compose.yml
+!.env.example
+/secrets/
