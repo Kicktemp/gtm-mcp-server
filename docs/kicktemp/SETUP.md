@@ -53,9 +53,20 @@ docker run --rm -v gtm-mcp-server_gtm-data:/data alpine:3.21 cat /data/audit.jso
 
 ## 2. Google-Seite (einmalig)
 
+Eingerichtet (Stand 30.09.2026):
+
+| | |
+|---|---|
+| GCP-Projekt | `kicktemp-gtm-mcp` (Tag Manager API aktiviert) |
+| Service Account | `gtm-mcp@kicktemp-gtm-mcp.iam.gserviceaccount.com` |
+| GTM-Konto | Kicktemp GmbH (`6001479822`) |
+| Sandbox für Abnahmetests | „KCM Test“, `GTM-TNZ2LC8` (Container-ID `38459368`) |
+| Weiterer Container, erst nach bestandener Abnahme | Androklinik `GTM-KVGB2N5L` |
+
 1. GCP-Projekt „kicktemp-gtm-mcp“ anlegen, **Tag Manager API** aktivieren.
 2. Service Account anlegen, JSON-Key erzeugen und als `secrets/gtm-sa.json` ablegen (`secrets/` ist in
-   `.gitignore` und `.dockerignore`).
+   `.gitignore` und `.dockerignore`). Der Key ist ein langlebiges Geheimnis: nicht committen, nicht teilen;
+   bei Verdacht in der GCP-Konsole löschen und neu erzeugen.
 3. In GTM die E-Mail des Service Accounts hinzufügen:
    - Konto: **Lesen** (Admin ist nicht nötig)
    - Container: **Bearbeiten** (nicht „Genehmigen“, nicht „Veröffentlichen“)
@@ -96,11 +107,13 @@ gilt prozessweit für Tool-Aufrufe, `fingerprint_before`, Typ-Prüfung und die C
 ```bash
 cp .env.example .env
 # SERVICE_ACCOUNT_API_KEY=$(openssl rand -hex 32) in .env eintragen
-# KT_ALLOWED_CONTAINERS=GTM-XXXX in .env eintragen (Public ID der Sandbox)
 docker compose up -d --build
 docker compose ps          # Status "healthy"
 docker compose logs -f
 ```
+
+`KT_ALLOWED_CONTAINERS` steht in `docker-compose.yml` und ist auf die Sandbox `GTM-TNZ2LC8` gesetzt. Um
+`GTM-KVGB2N5L` freizuschalten, dort eintragen (`"GTM-TNZ2LC8,GTM-KVGB2N5L"`), erst nach bestandener Abnahme.
 
 Nach Änderungen an der Container-Liste in GTM oder in `KT_ALLOWED_CONTAINERS`: `docker compose up -d`
 (Neustart). Die Zuordnung Public ID → Container-ID wird nur beim Start gelesen.
@@ -143,6 +156,11 @@ Der Wert „Bearer …“ steht absichtlich komplett in `env`: Leerzeichen in `a
 
 ## 5. Abnahme (gegen den Sandbox-Container)
 
+Die Abnahme läuft als Skript: `scripts/kicktemp-acceptance.sh` (nur lesen und Ablehnungen) bzw.
+`WRITE=1 scripts/kicktemp-acceptance.sh` (legt zusätzlich in einem neuen Workspace `kt-acceptance-<zeit>` einen
+Trigger, einen GA4-Tag und eine Version an, ändert den Tag und prüft das Audit-Log). Delete ist gesperrt:
+den Test-Workspace danach im GTM-UI löschen. Das Skript liest den Key aus `.env`.
+
 Bereits ohne Google-Zugang geprüft (laufendes Docker-Image bzw. der lokal gebaute Binary desselben Codes):
 
 - [x] Container läuft als `65532:65532`, Root-Dateisystem read-only, `cap_drop: ALL`, Port nur auf `127.0.0.1`
@@ -152,14 +170,15 @@ Bereits ohne Google-Zugang geprüft (laufendes Docker-Image bzw. der lokal gebau
 - [x] `LOG_LEVEL=debug`: keine Tokens, Keys oder SA-Inhalte im Log (Tests `TestDebugLogsContain…`, `TestGTMDebug…`)
 - [x] `audit.jsonl` hat Modus 0600 und gehört UID 65532
 
-Braucht den echten Service Account, von Niels zu prüfen:
+Mit dem echten Service Account (das Skript ohne `WRITE=1` ist gegen `GTM-TNZ2LC8` gelaufen, 32 Prüfungen
+bestanden; die Schreibschritte sind noch offen):
 
-- [ ] Container, Workspaces, Tags, Trigger, Variablen lesen
-- [ ] Tag im Workspace anlegen (z. B. GA4-Event), ändern, `create_version` ausführen
+- [x] Container, Workspaces, Tags, Trigger, Variablen lesen; `list_containers` zeigt nur die Sandbox
+- [x] Fremde Container-ID, Pfad-Traversal, Custom-HTML-Tag und `jsm`-Variable werden abgelehnt
+- [ ] Tag im Workspace anlegen (z. B. GA4-Event), ändern, `create_version` ausführen (`WRITE=1`)
 - [ ] Publish-Tool ist nicht vorhanden; ein direkter API-Publish mit dem SA scheitert an den GTM-Rechten
-- [ ] Container außerhalb der Liste (echte zweite Container-ID) wird abgelehnt
-- [ ] `audit.jsonl` enthält `start` und `end` für jede Schreibaktion, mit `fingerprint_before`/`_after`
-- [ ] Custom-HTML-Tag anlegen wird abgelehnt (`KT_ALLOW_CUSTOM_CODE=false`)
+- [ ] Container außerhalb der Liste (echte zweite Container-ID, z. B. Androklinik) wird abgelehnt
+- [ ] `audit.jsonl` enthält `start` und `end` für jede Schreibaktion, mit `fingerprint_before`/`_after` (`WRITE=1` prüft das)
 - [ ] Beim Start mit falscher Public ID in `KT_ALLOWED_CONTAINERS`: Abbruch mit Fehlermeldung
 
 ## 6. Upstream-Updates
