@@ -1,0 +1,32 @@
+# Kicktemp GTM MCP server, local use. Port is published on 127.0.0.1 only.
+#   1. cp .env.example .env && put an API key into it (openssl rand -hex 32)
+#   2. put the service-account key into ./secrets/gtm-sa.json
+#   3. docker compose up -d --build
+services:
+  gtm-mcp:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file: .env # not committed, see .env.example
+    environment:
+      BASE_URL: http://localhost:8080
+      KT_OAUTH_ENABLED: "false"
+      KT_ALLOW_PUBLISH: "false"
+      KT_ALLOW_DELETE: "false"
+      KT_ALLOW_ADMIN: "false"
+      KT_ALLOW_CUSTOM_CODE: "false"
+      KT_ALLOWED_CONTAINERS: ${KT_ALLOWED_CONTAINERS:-GTM-KVGB2N5L}
+      GOOGLE_SERVICE_ACCOUNT_KEY_FILE: /run/secrets/gtm_sa
+      TOKEN_STORE_PATH: /data/tokens.json
+      KT_AUDIT_LOG_PATH: /data/audit.jsonl
+    secrets: [gtm_sa]
+    volumes: [gtm-data:/data]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+secrets:
+  gtm_sa:
+    file: ./secrets/gtm-sa.json
+volumes:
+  gtm-data:

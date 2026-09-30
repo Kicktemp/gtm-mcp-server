@@ -12,3 +12,9 @@ docker-compose.yml
 
 # Local planning documents
 planning/
+
+# Kicktemp: never send secrets, notes or the CI config into the build context
+secrets/
+docs/
+.github/
+*.jsonl

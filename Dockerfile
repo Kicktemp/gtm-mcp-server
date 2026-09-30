@@ -1,42 +1,25 @@
-# Build stage (using Google mirror to avoid Docker Hub rate limits)
-FROM mirror.gcr.io/library/golang:1.26-alpine AS builder
+# Kicktemp fork: multi-stage build, distroless non-root runtime, base images pinned by digest.
+# Refresh the digests with: docker buildx imagetools inspect <image>:<tag>
 
+# Build stage (Google mirror avoids Docker Hub rate limits). golang:1.26-alpine at this digest is Go 1.26.8.
+FROM mirror.gcr.io/library/golang:1.26-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS builder
 WORKDIR /app
-
-# Install ca-certificates for HTTPS requests
-RUN apk add --no-cache ca-certificates
-
-# Copy go mod files first for better caching
 COPY go.mod go.sum ./
 RUN go mod download
-
-# Copy source code
 COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o gtm-mcp-server .
+# Data directory for the audit log and token store, owned by the runtime user (65532).
+RUN mkdir -p /out/data && chmod 700 /out/data
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o gtm-mcp-server .
-
-# Runtime stage (using Google mirror)
-FROM mirror.gcr.io/library/alpine:3.21
-
-WORKDIR /app
-
-# Install ca-certificates for HTTPS requests to Google APIs
-RUN apk add --no-cache ca-certificates tzdata
-
-# Copy binary from builder
-COPY --from=builder /app/gtm-mcp-server .
-
-# Create non-root user and a writable data directory for TOKEN_STORE_PATH
-RUN adduser -D -g '' appuser && mkdir -p /data && chown appuser:appuser /data && chmod 700 /data
-USER appuser
-
-# Expose port
+# Runtime stage: no shell, no package manager, CA certificates and tzdata included.
+FROM gcr.io/distroless/static:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3
+COPY --from=builder --chown=65532:65532 /app/gtm-mcp-server /gtm-mcp-server
+COPY --from=builder --chown=65532:65532 /out/data /data
+# Inside the container the server must listen on all interfaces; publish the port on 127.0.0.1 only.
+ENV KT_LISTEN_ADDR=0.0.0.0:8080
+USER 65532:65532
 EXPOSE 8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
-
-# Run the server
-CMD ["./gtm-mcp-server"]
+# distroless has no wget/curl: the binary probes its own /health.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["/gtm-mcp-server", "-healthcheck"]
+ENTRYPOINT ["/gtm-mcp-server"]
