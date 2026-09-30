@@ -9,6 +9,10 @@ const (
 	CategoryDelete  Category = "delete"
 	CategoryPublish Category = "publish"
 	CategoryAdmin   Category = "admin"
+	// CategoryCode marks tools that create or change code GTM will execute on
+	// websites (custom templates). Tags and variables are code-gated by their
+	// arguments instead, see code.go.
+	CategoryCode Category = "code"
 )
 
 // Scope tells which arguments identify the GTM target of a tool.
@@ -79,7 +83,6 @@ var tools = merge(
 		"create_zone", "update_zone",
 		"create_google_tag_config", "update_google_tag_config",
 		"enable_built_in_variables",
-		"create_template", "update_template", "import_gallery_template",
 		"create_client", "update_client", "create_transformation", "update_transformation"),
 
 	// bulk_update_workspace and resolve_workspace_conflict take free-form JSON
@@ -90,6 +93,8 @@ var tools = merge(
 		"bulk_update_workspace", "resolve_workspace_conflict",
 		"delete_zone", "delete_google_tag_config", "disable_built_in_variables",
 		"delete_template", "delete_client", "delete_transformation"),
+
+	toolsOf(CategoryCode, ScopeContainer, "create_template", "update_template", "import_gallery_template"),
 
 	toolsOf(CategoryPublish, ScopeContainer, "publish_version", "set_latest_version"),
 

@@ -20,6 +20,8 @@ func (c *Config) Allowed(cat Category) bool {
 		return c.AllowDelete
 	case CategoryAdmin:
 		return c.AllowAdmin
+	case CategoryCode:
+		return c.AllowCustomCode
 	}
 	return false
 }
@@ -33,6 +35,8 @@ func flagFor(cat Category) string {
 		return "KT_ALLOW_DELETE"
 	case CategoryAdmin:
 		return "KT_ALLOW_ADMIN"
+	case CategoryCode:
+		return "KT_ALLOW_CUSTOM_CODE"
 	}
 	return ""
 }
@@ -97,7 +101,7 @@ type Gate struct {
 // audit log and the entity cache.
 func NewGate(cfg *Config, allow *Allowlist, audit *Audit, ents *Entities) *Gate {
 	g := &Gate{cfg: cfg, allow: allow, audit: audit, ents: ents}
-	g.checks = append(g.checks, g.categoryCheck, allow.check)
+	g.checks = append(g.checks, g.categoryCheck, allow.check, g.codeCheck)
 	g.afters = append(g.afters, allow.after)
 	return g
 }

@@ -21,6 +21,10 @@ type Config struct {
 	AllowDelete bool
 	// AllowAdmin enables the admin category (KT_ALLOW_ADMIN).
 	AllowAdmin bool
+	// AllowCustomCode enables everything that creates or changes code GTM
+	// executes on websites: custom templates, Custom HTML and custom-template
+	// tags, Custom JavaScript variables (KT_ALLOW_CUSTOM_CODE).
+	AllowCustomCode bool
 
 	// AllowAllContainers is true when KT_ALLOWED_CONTAINERS is "*".
 	AllowAllContainers bool
@@ -61,6 +65,9 @@ func Load(getenv func(string) string) (*Config, error) {
 		return nil, err
 	}
 	if cfg.AllowAdmin, err = envBool(getenv, "KT_ALLOW_ADMIN", false); err != nil {
+		return nil, err
+	}
+	if cfg.AllowCustomCode, err = envBool(getenv, "KT_ALLOW_CUSTOM_CODE", false); err != nil {
 		return nil, err
 	}
 	if cfg.OAuthEnabled, err = envBool(getenv, "KT_OAUTH_ENABLED", false); err != nil {

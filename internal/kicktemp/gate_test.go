@@ -59,7 +59,7 @@ func listNames(t *testing.T, cs *mcp.ClientSession) map[string]bool {
 }
 
 func TestEveryRegisteredToolIsClassified(t *testing.T) {
-	cs := newSession(t, &kicktemp.Config{AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowAllContainers: true}, false)
+	cs := newSession(t, &kicktemp.Config{AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowCustomCode: true, AllowAllContainers: true}, false)
 	registered := listNames(t, cs)
 	if len(registered) != 94 {
 		t.Fatalf("registered tools = %d, want 94 (update categories.go after upstream changes)", len(registered))

@@ -46,7 +46,7 @@ func allowSession(t *testing.T, allowed ...string) *mcp.ClientSession {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
-	cfg := &kicktemp.Config{AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowedContainers: allowed}
+	cfg := &kicktemp.Config{AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowCustomCode: true, AllowedContainers: allowed}
 	allow := kicktemp.NewAllowlist(cfg)
 	if err := allow.InitWithLister(ctx, &fakeLister{}); err != nil {
 		t.Fatal(err)
