@@ -35,6 +35,10 @@ type TokenInfo struct {
 	// Metadata
 	ClientID  string
 	CreatedAt time.Time
+
+	// Email is the verified Google account that authorized this token, set when
+	// an identity check is configured (Kicktemp fork).
+	Email string `json:",omitempty"`
 }
 
 // AuthorizationCode is ephemeral and never enters the bearer-token store.
@@ -42,6 +46,9 @@ type AuthorizationCode struct {
 	AuthState
 	GoogleToken *oauth2.Token
 	ExpiresAt   time.Time
+	// Email is the verified Google account, set when an identity check is
+	// configured (Kicktemp fork).
+	Email string
 }
 
 // AuthState holds temporary state during OAuth flow.

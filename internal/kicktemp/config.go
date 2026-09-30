@@ -31,6 +31,10 @@ type Config struct {
 	// the service-account bearer key is accepted and all OAuth routes are gone.
 	OAuthEnabled bool
 
+	// AllowedEmails lists the Google accounts that may log in when OAuth is
+	// enabled (KT_ALLOWED_EMAILS, lower-cased). Empty means OAuth is refused.
+	AllowedEmails []string
+
 	// AuditLogPath is the JSON Lines audit log (KT_AUDIT_LOG_PATH). It cannot
 	// be switched off: the server refuses to start if it is not writable.
 	AuditLogPath string
@@ -55,6 +59,16 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	if cfg.AllowAllContainers, cfg.AllowedContainers, err = parseContainers(getenv("KT_ALLOWED_CONTAINERS")); err != nil {
 		return nil, err
+	}
+	for _, e := range strings.Split(getenv("KT_ALLOWED_EMAILS"), ",") {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if e == "" {
+			continue
+		}
+		if !strings.Contains(e, "@") || strings.ContainsAny(e, " *") {
+			return nil, fmt.Errorf("KT_ALLOWED_EMAILS: %q is not an email address", e)
+		}
+		cfg.AllowedEmails = append(cfg.AllowedEmails, e)
 	}
 	cfg.AuditLogPath = strings.TrimSpace(getenv("KT_AUDIT_LOG_PATH"))
 	if cfg.AuditLogPath == "" {

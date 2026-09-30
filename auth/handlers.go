@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -13,6 +14,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 // Server handles OAuth2 authorization endpoints.
@@ -24,6 +27,17 @@ type Server struct {
 	accessTokenTTL time.Duration
 	resolver       *URLResolver
 	cimd           *CIMDFetcher
+	identityCheck  IdentityCheck
+}
+
+// IdentityCheck verifies who completed Google consent, right after the code
+// exchange. It returns the account's email, or an error to refuse the login.
+type IdentityCheck func(ctx context.Context, googleToken *oauth2.Token) (email string, err error)
+
+// SetIdentityCheck installs a check that runs on every OAuth callback
+// (Kicktemp fork: restrict logins to allowed Google accounts).
+func (s *Server) SetIdentityCheck(f IdentityCheck) {
+	s.identityCheck = f
 }
 
 // SetCIMDFetcher overrides the Client ID Metadata Document fetcher (tests).
@@ -237,6 +251,15 @@ func (s *Server) CallbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	email := ""
+	if s.identityCheck != nil {
+		if email, err = s.identityCheck(r.Context(), googleToken); err != nil {
+			s.logger.Warn("login refused by identity check", "reason", err.Error())
+			http.Error(w, "access_denied: this Google account is not allowed to use this server", http.StatusForbidden)
+			return
+		}
+	}
+
 	// Generate our own authorization code to return to Claude
 	ourCode, err := GenerateToken(32)
 	if err != nil {
@@ -254,6 +277,7 @@ func (s *Server) CallbackHandler(w http.ResponseWriter, r *http.Request) {
 		},
 		GoogleToken: googleToken,
 		ExpiresAt:   time.Now().Add(5 * time.Minute),
+		Email:       email,
 	}
 	if err := s.store.StoreAuthorizationCode(codeState); err != nil {
 		s.logger.Error("failed to store authorization code", "error", err)
@@ -427,6 +451,7 @@ func (s *Server) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Req
 		GoogleToken:      codeState.GoogleToken,
 		ClientID:         codeState.ClientID,
 		CreatedAt:        time.Now(),
+		Email:            codeState.Email,
 	}
 
 	if err := s.store.StoreToken(tokenInfo); err != nil {
@@ -496,6 +521,7 @@ func (s *Server) handleRefreshTokenGrant(w http.ResponseWriter, r *http.Request)
 		GoogleToken:      tokenInfo.GoogleToken,
 		ClientID:         tokenInfo.ClientID,
 		CreatedAt:        time.Now(),
+		Email:            tokenInfo.Email,
 	}
 
 	if err := s.store.RotateToken(refreshToken, newTokenInfo); err != nil {

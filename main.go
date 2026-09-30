@@ -86,7 +86,8 @@ func main() {
 	}
 	defer audit.Close()
 	allow := kicktemp.NewAllowlist(kt)
-	server.AddReceivingMiddleware(kicktemp.NewGate(kt, allow, audit, kicktemp.NewEntities()).Middleware())
+	gate := kicktemp.NewGate(kt, allow, audit, kicktemp.NewEntities())
+	server.AddReceivingMiddleware(gate.Middleware())
 
 	// Add logging middleware
 	server.AddReceivingMiddleware(middleware.NewLoggingMiddleware(logger))

@@ -113,6 +113,9 @@ func identity(ctx context.Context) string {
 	if auth.GetSATokenSource(ctx) != nil {
 		return "service-account"
 	}
+	if ti := auth.GetTokenInfo(ctx); ti != nil && ti.Email != "" {
+		return "email:" + ti.Email
+	}
 	if ti := auth.GetTokenInfo(ctx); ti != nil && ti.AccessToken != "" {
 		sum := sha256.Sum256([]byte(ti.AccessToken))
 		return "token:" + hex.EncodeToString(sum[:4])

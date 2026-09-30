@@ -100,18 +100,20 @@ func TestCheckAuth(t *testing.T) {
 		key     string
 		google  bool
 		wantErr string
+		emails  []string
 	}{
-		{"default without key: no open mode", false, "", false, "SERVICE_ACCOUNT_API_KEY is required"},
-		{"short key", false, "short", false, "too short"},
-		{"31 bytes", false, strings.Repeat("a", 31), false, "too short"},
-		{"32 bytes ok", false, strings.Repeat("a", 32), false, ""},
-		{"generated key ok", false, testKey, false, ""},
-		{"oauth on without google client", true, testKey, false, "GOOGLE_CLIENT_ID"},
-		{"oauth on with google client, no key", true, "", true, ""},
-		{"oauth on, weak key", true, "weak", true, "too short"},
+		{"default without key: no open mode", false, "", false, "SERVICE_ACCOUNT_API_KEY is required", nil},
+		{"short key", false, "short", false, "too short", nil},
+		{"31 bytes", false, strings.Repeat("a", 31), false, "too short", nil},
+		{"32 bytes ok", false, strings.Repeat("a", 32), false, "", nil},
+		{"generated key ok", false, testKey, false, "", nil},
+		{"oauth on without google client", true, testKey, false, "GOOGLE_CLIENT_ID", []string{"a@b.de"}},
+		{"oauth on with google client, no key", true, "", true, "", []string{"a@b.de"}},
+		{"oauth on, weak key", true, "weak", true, "too short", []string{"a@b.de"}},
+		{"oauth on without allowed emails", true, testKey, true, "KT_ALLOWED_EMAILS", nil},
 	}
 	for _, tc := range cases {
-		err := (&kicktemp.Config{OAuthEnabled: tc.oauth}).CheckAuth(tc.key, tc.google)
+		err := (&kicktemp.Config{OAuthEnabled: tc.oauth, AllowedEmails: tc.emails}).CheckAuth(tc.key, tc.google)
 		switch {
 		case tc.wantErr == "" && err != nil:
 			t.Errorf("%s: unexpected error %v", tc.name, err)

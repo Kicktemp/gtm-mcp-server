@@ -13,11 +13,14 @@ const minAPIKeyBytes = 32
 // unauthenticated mode, and the bearer key must be strong.
 //
 //   - OAuth off (default): SERVICE_ACCOUNT_API_KEY is mandatory (>= 32 bytes).
-//   - OAuth on: Google client credentials are mandatory; a service-account key,
-//     if set, must be strong as well.
+//   - OAuth on: Google client credentials and KT_ALLOWED_EMAILS are mandatory;
+//     a service-account key, if set, must be strong as well.
 func (c *Config) CheckAuth(apiKey string, googleClientConfigured bool) error {
 	if c.OAuthEnabled && !googleClientConfigured {
 		return fmt.Errorf("KT_OAUTH_ENABLED=true requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET")
+	}
+	if c.OAuthEnabled && len(c.AllowedEmails) == 0 {
+		return fmt.Errorf("KT_OAUTH_ENABLED=true requires KT_ALLOWED_EMAILS: with an empty list every login is refused")
 	}
 	if apiKey == "" {
 		if c.OAuthEnabled {

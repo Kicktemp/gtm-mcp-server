@@ -90,6 +90,7 @@ type Gate struct {
 	allow  *Allowlist
 	audit  *Audit    // nil disables auditing (tests)
 	ents   *Entities // nil disables the entity cache (tests)
+	emails *EmailPolicy
 }
 
 // NewGate builds the policy middleware for cfg, the container allowlist, the
@@ -153,6 +154,9 @@ func (g *Gate) Middleware() mcp.Middleware {
 				}
 				return res, err
 			case "resources/read":
+				if err := g.emails.checkRequest(ctx); err != nil {
+					return nil, err
+				}
 				if rr, ok := req.(*mcp.ReadResourceRequest); ok {
 					if err := g.allow.checkResource(ctx, rr.Params.URI); err != nil {
 						return nil, err
