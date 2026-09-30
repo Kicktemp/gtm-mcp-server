@@ -15,6 +15,7 @@ import (
 	"gtm-mcp-server/auth"
 	"gtm-mcp-server/config"
 	"gtm-mcp-server/gtm"
+	"gtm-mcp-server/internal/kicktemp"
 	"gtm-mcp-server/middleware"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -46,6 +47,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Kicktemp hardening policy (KT_* variables); invalid values abort startup.
+	kt, err := kicktemp.Load(os.Getenv)
+	if err != nil {
+		logger.Error("invalid kicktemp configuration", "error", err)
+		os.Exit(1)
+	}
+
 	// Adjust log level
 	if cfg.LogLevel == "debug" {
 		logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
@@ -60,6 +68,9 @@ func main() {
 		Version: serverVersion,
 	}, nil)
 
+	// Kicktemp policy first, so the logging middleware (added last = outermost) also sees refusals.
+	server.AddReceivingMiddleware(kicktemp.NewGate(kt).Middleware())
+
 	// Add logging middleware
 	server.AddReceivingMiddleware(middleware.NewLoggingMiddleware(logger))
 
@@ -69,6 +80,7 @@ func main() {
 		os.Exit(1)
 	}
 	registerTools(server, toolGroups)
+	kicktemp.FilterTools(server, kt)
 	logger.Info("registered GTM tool groups", "groups", toolGroups.Names())
 
 	// TODO(stdio): branch here on the configured transport. In stdio mode,
