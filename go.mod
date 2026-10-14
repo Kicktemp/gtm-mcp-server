@@ -2,6 +2,8 @@ module gtm-mcp-server
 
 go 1.26.0
 
+toolchain go1.26.9
+
 require (
 	github.com/joho/godotenv v1.5.1
 	github.com/modelcontextprotocol/go-sdk v1.7.0

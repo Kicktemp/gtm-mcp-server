@@ -1,8 +1,8 @@
 # Kicktemp fork: multi-stage build, distroless non-root runtime, base images pinned by digest.
 # Refresh the digests with: docker buildx imagetools inspect <image>:<tag>
 
-# Build stage (Google mirror avoids Docker Hub rate limits). golang:1.26-alpine at this digest is Go 1.26.8.
-FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/golang:1.26-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS builder
+# Build stage (Google mirror avoids Docker Hub rate limits). golang:1.26.9-alpine at this digest is Go 1.26.9 (stdlib fixes for GO-2026-6610..6617).
+FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/golang:1.26.9-alpine@sha256:3082400e369fa24d5fc60bca20edab3f6d604e0c5a690ec66b295eff4dd87ade AS builder
 ARG TARGETOS=linux
 ARG TARGETARCH
 WORKDIR /app

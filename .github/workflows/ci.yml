@@ -19,9 +19,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          # Latest 1.26.x patch release: govulncheck flags standard-library
-          # fixes that older patch releases do not have.
-          go-version: "1.26"
+          # The toolchain line in go.mod pins the patch release: govulncheck flags
+          # standard-library fixes that older patch releases do not have. Bump it
+          # (go get toolchain@go1.26.x) together with the Dockerfile builder digest.
+          go-version-file: go.mod
       - run: go build ./...
       - run: go vet ./...
       - run: go test -race ./...
