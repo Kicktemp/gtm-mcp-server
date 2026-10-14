@@ -60,7 +60,7 @@ const tagPath = "accounts/1/containers/100/workspaces/5/tags/9"
 const varPath = "accounts/1/containers/100/workspaces/5/variables/4"
 
 func TestCodeGateBlocksCustomCodeByArguments(t *testing.T) {
-	cs, _ := codeSession(t, &kicktemp.Config{AllowDelete: true}, map[string]string{
+	cs, _ := codeSession(t, &kicktemp.Config{AllowWrite: true, AllowDelete: true}, map[string]string{
 		tagPath: "html", varPath: "jsm",
 		"accounts/1/containers/100/workspaces/5/tags/10":      "gaawe",
 		"accounts/1/containers/100/workspaces/5/tags/11":      "cvt_ABC",
@@ -111,7 +111,7 @@ func TestCodeGateBlocksCustomCodeByArguments(t *testing.T) {
 }
 
 func TestCodeGateOpenAllowsCustomCode(t *testing.T) {
-	cs, fetched := codeSession(t, &kicktemp.Config{AllowCustomCode: true, AllowDelete: true}, map[string]string{tagPath: "html"})
+	cs, fetched := codeSession(t, &kicktemp.Config{AllowWrite: true, AllowCustomCode: true, AllowDelete: true}, map[string]string{tagPath: "html"})
 	for _, tc := range []struct {
 		tool string
 		args map[string]any
@@ -132,7 +132,7 @@ func TestCodeGateOpenAllowsCustomCode(t *testing.T) {
 
 func TestTemplateToolsAreCodeCategory(t *testing.T) {
 	templateTools := []string{"create_template", "update_template", "import_gallery_template"}
-	cs, _ := codeSession(t, &kicktemp.Config{}, nil)
+	cs, _ := codeSession(t, &kicktemp.Config{AllowWrite: true}, nil)
 	names := listNames(t, cs)
 	for _, n := range templateTools {
 		if names[n] {
@@ -150,7 +150,7 @@ func TestTemplateToolsAreCodeCategory(t *testing.T) {
 		t.Error("reading templates stays possible")
 	}
 
-	open, _ := codeSession(t, &kicktemp.Config{AllowCustomCode: true}, nil)
+	open, _ := codeSession(t, &kicktemp.Config{AllowWrite: true, AllowCustomCode: true}, nil)
 	names = listNames(t, open)
 	for _, n := range templateTools {
 		if !names[n] {

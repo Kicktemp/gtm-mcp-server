@@ -11,24 +11,28 @@ Alle Änderungen liegen in `internal/kicktemp/`; Upstream-Dateien haben nur klei
 
 | Env-Variable | Default | Wirkung |
 |---|---|---|
-| `SERVICE_ACCOUNT_API_KEY` | – (Pflicht) | Bearer-Key für den MCP-Endpoint, mindestens 32 Byte (`openssl rand -hex 32`). Ohne Key startet der Server nicht; einen offenen Modus gibt es nicht mehr. |
+| `SERVICE_ACCOUNT_API_KEY` oder `MCP_AUTH_TOKEN` | – (Pflicht) | Bearer-Key für den MCP-Endpoint, mindestens 32 Byte (`openssl rand -hex 32`). `MCP_AUTH_TOKEN` ist der Name im Marketing-Stack; beide gesetzt mit verschiedenen Werten = Startabbruch. Ohne Key startet der Server nicht; einen offenen Modus gibt es nicht mehr. |
+| `GTM_WRITE_ENABLED` | `false` | Schaltet die normalen Schreib-Tools frei (`create_*`/`update_*` für Workspaces, Tags, Trigger, Variablen, Versionen, Ordner, Zonen, Clients, Transformationen, `enable_built_in_variables`). Aus: Tools nicht registriert, Aufruf wird abgelehnt. Lesen bleibt immer möglich. Publish/Delete/Admin/Code haben weiter eigene `KT_ALLOW_*`-Schalter. |
 | `KT_ALLOW_PUBLISH` | `false` | `publish_version`, `set_latest_version` |
 | `KT_ALLOW_DELETE` | `false` | alle `delete_*`, `revert_*`, `disable_built_in_variables`, `bulk_update_workspace`, `resolve_workspace_conflict` |
 | `KT_ALLOW_ADMIN` | `false` | Container/Account ändern oder löschen, `combine_containers`, `move_tag_id`, `link_destination`, Environments anlegen/ändern/löschen |
 | `KT_ALLOW_CUSTOM_CODE` | `false` | Templates (`create_template`, `update_template`, `import_gallery_template`), Tags vom Typ `html` oder `cvt_*`, Variablen vom Typ `jsm`. Geprüft wird auf den Argumenten (auch in `changesJson`/`entityJson`) und bei Updates auf dem bestehenden Typ. |
-| `KT_ALLOWED_CONTAINERS` | leer = **nichts** erlaubt | Kommagetrennte Public IDs (`GTM-XXXX`), oder `*` für alle. Wird beim Start einmal zu Account/Container-IDs aufgelöst; eine unbekannte ID bricht den Start ab. |
+| `KT_ALLOWED_CONTAINERS` oder `GTM_ALLOWLIST` | leer = **nichts** erlaubt | Gilt für **Lesen und Schreiben**. `GTM_ALLOWLIST` ist der Name im Marketing-Stack (verschiedene Werte in beiden = Startabbruch). Kommagetrennte Public IDs (`GTM-XXXX`), oder `*` für alle. Wird beim Start einmal zu Account/Container-IDs aufgelöst; eine unbekannte ID bricht den Start ab. |
 | `KT_AUDIT_LOG_PATH` | `/data/audit.jsonl` | Audit-Log (JSON Lines, 0600). Nicht abschaltbar; ist die Datei nicht beschreibbar, startet der Server nicht. |
 | `KT_OAUTH_ENABLED` | `false` | Aus: keine OAuth-Routen, Google-Client-Variablen werden ignoriert. |
 | `KT_ALLOWED_EMAILS` | leer | Nur bei OAuth: erlaubte Google-Konten. OAuth ohne diese Liste startet nicht. |
 | `GOOGLE_SERVICE_ACCOUNT_KEY_FILE` | – | Pfad zum SA-Key (Docker Secret). Nicht zusammen mit `GOOGLE_SERVICE_ACCOUNT_KEY_JSON`. |
 | `KT_GTM_QPM` | `25` | Obergrenze für GTM-API-Requests pro Minute, prozessweit (siehe „Kontingente“). |
 | `KT_GTM_MAX_WAIT` | `60s` | So lange darf ein Request auf einen freien Platz warten. Danach schlägt der Tool-Aufruf mit „rate limited, retry later“ fehl. |
-| `KT_LISTEN_ADDR` | `127.0.0.1:8080` | Im Container `0.0.0.0:8080` (Dockerfile), der Port wird nur auf `127.0.0.1` veröffentlicht. |
+| `PORT` + `KT_LISTEN_HOST` | `8080` + `127.0.0.1` | Im Container `0.0.0.0` (Dockerfile); der Port wird nur auf `127.0.0.1` veröffentlicht. |
+| `KT_LISTEN_ADDR` | – | Vollständige Adresse `host:port`; hat Vorrang vor `PORT` + `KT_LISTEN_HOST`. |
 
 Zusätzlich:
 
-- Erreichbar sind nur `/health` (ohne Auth) und `/` (der MCP-Endpoint, Bearer). Alle anderen Pfade
-  liefern 404, auch `/mcp`, `/llms.txt` und die OAuth-Routen (bei `KT_OAUTH_ENABLED=false`).
+- Erreichbar sind nur `/health` und `/healthz` (ohne Auth) und `/mcp` (der MCP-Endpoint, Bearer). Alle anderen
+  Pfade liefern 404, auch `/`, `/llms.txt` und die OAuth-Routen (bei `KT_OAUTH_ENABLED=false`).
+  Bei `KT_OAUTH_ENABLED=true` zeigen die OAuth-Metadaten noch auf den früheren Pfad `/`; dieser Modus ist
+  nach der Umstellung auf `/mcp` nicht nachgezogen und im Stack nicht vorgesehen.
 - `GTM_DEBUG` (HTTP-Body-Dump) wurde entfernt.
 - Bei jedem Tool-Aufruf werden ID-Argumente (`*Id`, `*Ids`) auf `[A-Za-z0-9_-]` geprüft, weil Upstream sie
   ungeprüft in API-Pfade einsetzt (`workspaceId="5/../../containers/9"`).
@@ -124,12 +128,12 @@ Nach Änderungen an der Container-Liste in GTM oder in `KT_ALLOWED_CONTAINERS`: 
 
 ## 4. In Claude einbinden
 
-Endpoint ist `http://localhost:8080/` (Pfad `/`), Header `Authorization: Bearer <SERVICE_ACCOUNT_API_KEY>`.
+Endpoint ist `http://localhost:8080/mcp` (im Marketing-Stack `http://localhost:8082/mcp`), Header `Authorization: Bearer <SERVICE_ACCOUNT_API_KEY>`.
 
 **Claude Code**
 
 ```bash
-claude mcp add --transport http --scope user gtm-mcp http://localhost:8080/ \
+claude mcp add --transport http --scope user gtm-mcp http://localhost:8080/mcp \
   --header "Authorization: Bearer <SERVICE_ACCOUNT_API_KEY>"
 ```
 
@@ -143,7 +147,7 @@ bei `kickmobimed-mcp` (Remote-Server über `mcp-remote`, Secret in `env`, nicht 
   "args": [
     "-y",
     "mcp-remote",
-    "http://localhost:8080/",
+    "http://localhost:8080/mcp",
     "--header",
     "Authorization:${GTM_MCP_AUTH}"
   ],
@@ -161,7 +165,7 @@ Der Wert „Bearer …“ steht absichtlich komplett in `env`: Leerzeichen in `a
 ## 5. Abnahme (gegen den Sandbox-Container)
 
 Die Abnahme läuft als Skript: `scripts/kicktemp-acceptance.sh` (nur lesen und Ablehnungen) bzw.
-`WRITE=1 scripts/kicktemp-acceptance.sh` (legt zusätzlich in einem neuen Workspace `kt-acceptance-<zeit>` einen
+`WRITE=1 scripts/kicktemp-acceptance.sh` (braucht `GTM_WRITE_ENABLED=true`) (legt zusätzlich in einem neuen Workspace `kt-acceptance-<zeit>` einen
 Trigger, einen GA4-Tag und eine Version an, ändert den Tag und prüft das Audit-Log). Delete ist gesperrt:
 den Test-Workspace danach im GTM-UI löschen. Das Skript liest den Key aus `.env`.
 

@@ -36,6 +36,20 @@ func TestListenAddress(t *testing.T) {
 	}
 }
 
+func TestListenHostAndPort(t *testing.T) {
+	get := func(m map[string]string) func(string) string {
+		return func(k string) string { return m[k] }
+	}
+	c, err := kicktemp.Load(get(map[string]string{"KT_LISTEN_HOST": "0.0.0.0"}))
+	if err != nil || c.ListenAddress(8080) != "0.0.0.0:8080" {
+		t.Errorf("KT_LISTEN_HOST must combine with PORT, got %q err=%v", c.ListenAddress(8080), err)
+	}
+	c, _ = kicktemp.Load(get(map[string]string{"KT_LISTEN_HOST": "0.0.0.0", "KT_LISTEN_ADDR": "127.0.0.1:9000"}))
+	if got := c.ListenAddress(8080); got != "127.0.0.1:9000" {
+		t.Errorf("KT_LISTEN_ADDR must win over KT_LISTEN_HOST, got %q", got)
+	}
+}
+
 func TestListensPublicly(t *testing.T) {
 	for addr, want := range map[string]bool{
 		"127.0.0.1:8080": false, "[::1]:8080": false, "localhost:8080": false,

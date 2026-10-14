@@ -5,6 +5,9 @@ import (
 	"net/http"
 )
 
+// MCPPath is the Streamable HTTP endpoint, identical for every server in the stack.
+const MCPPath = "/mcp"
+
 // minAPIKeyBytes is the minimum length of SERVICE_ACCOUNT_API_KEY
 // (openssl rand -hex 32 yields 64).
 const minAPIKeyBytes = 32
@@ -26,10 +29,10 @@ func (c *Config) CheckAuth(apiKey string, googleClientConfigured bool) error {
 		if c.OAuthEnabled {
 			return nil
 		}
-		return fmt.Errorf("SERVICE_ACCOUNT_API_KEY is required: the server does not run without authentication (generate one with: openssl rand -hex 32)")
+		return fmt.Errorf("SERVICE_ACCOUNT_API_KEY (or MCP_AUTH_TOKEN) is required: the server does not run without authentication (generate one with: openssl rand -hex 32)")
 	}
 	if len(apiKey) < minAPIKeyBytes {
-		return fmt.Errorf("SERVICE_ACCOUNT_API_KEY is too short (%d bytes, need at least %d): generate one with: openssl rand -hex 32", len(apiKey), minAPIKeyBytes)
+		return fmt.Errorf("SERVICE_ACCOUNT_API_KEY/MCP_AUTH_TOKEN is too short (%d bytes, need at least %d): generate one with: openssl rand -hex 32", len(apiKey), minAPIKeyBytes)
 	}
 	return nil
 }
@@ -37,11 +40,11 @@ func (c *Config) CheckAuth(apiKey string, googleClientConfigured bool) error {
 // RouteGuard answers 404 for every path that is not part of the intended
 // surface, before any handler (and before authentication) runs:
 //
-//   - always:      /health (no auth) and / (the MCP endpoint, bearer auth)
+//   - always:      /health and /healthz (no auth) and /mcp (the MCP endpoint, bearer auth)
 //   - OAuth on:    additionally the OAuth routes and /.well-known metadata
 //   - never:       /llms.txt and everything else
 func (c *Config) RouteGuard(next http.Handler) http.Handler {
-	allowed := map[string]bool{"/": true, "/health": true}
+	allowed := map[string]bool{MCPPath: true, "/health": true, "/healthz": true}
 	if c.OAuthEnabled {
 		for _, p := range []string{
 			"/authorize", "/oauth/callback", "/token", "/register",

@@ -70,6 +70,8 @@ func main() {
 		logger.Info("KT_OAUTH_ENABLED=false: ignoring GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET")
 		cfg.GoogleClientID, cfg.GoogleClientSecret = "", ""
 	}
+	// MCP_AUTH_TOKEN is the stack-wide name for the bearer key.
+	cfg.ServiceAccountAPIKey = kt.APIKey(cfg.ServiceAccountAPIKey)
 	if err := kt.CheckAuth(cfg.ServiceAccountAPIKey, cfg.ValidateAuth() == nil); err != nil {
 		logger.Error("invalid authentication configuration", "error", err)
 		os.Exit(1)
@@ -126,7 +128,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Health check endpoint (no auth required)
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
@@ -134,7 +136,9 @@ func main() {
 			"service": serverName,
 			"version": serverVersion,
 		})
-	})
+	}
+	mux.HandleFunc("GET /health", healthHandler)
+	mux.HandleFunc("GET /healthz", healthHandler) // stack-wide health path
 
 	// LLM context endpoint (no auth required)
 	mux.HandleFunc("GET /llms.txt", func(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +233,7 @@ func main() {
 		// MCP endpoint with REQUIRED auth middleware and body size limit
 		// Returns 401 if no valid Bearer token - triggers Claude's OAuth flow
 		authMiddleware := auth.Middleware(tokenStore, googleProvider, logger, cfg.BaseURL, cfg.AccessTokenTTL, urlResolver, saTokenSource, cfg.ServiceAccountAPIKey, cfg.AutoRefreshMaxAge)
-		mux.Handle("/", authMiddleware(maxBytesHandler(5<<20, mcpHandler)))
+		mux.Handle(kicktemp.MCPPath, authMiddleware(maxBytesHandler(5<<20, mcpHandler)))
 
 		logger.Info("OAuth configured",
 			"authorize_endpoint", cfg.BaseURL+"/authorize",
@@ -258,7 +262,7 @@ func main() {
 		mux.HandleFunc("POST /register", registerLimiter.MiddlewareFunc(oauthNotConfiguredHandler))
 
 		s2sMiddleware := auth.Middleware(auth.NewMemoryTokenStore(), nil, logger, cfg.BaseURL, cfg.AccessTokenTTL, urlResolver, saTokenSource, cfg.ServiceAccountAPIKey, cfg.AutoRefreshMaxAge)
-		mux.Handle("/", s2sMiddleware(maxBytesHandler(5<<20, mcpHandler)))
+		mux.Handle(kicktemp.MCPPath, s2sMiddleware(maxBytesHandler(5<<20, mcpHandler)))
 	} else {
 		logger.Warn("No authentication configured (no OAuth, no API key), running open")
 
@@ -276,7 +280,7 @@ func main() {
 		mux.HandleFunc("POST /register", registerLimiter.MiddlewareFunc(oauthNotConfiguredHandler))
 
 		// Truly open — no auth at all (local dev only)
-		mux.Handle("/", maxBytesHandler(5<<20, mcpHandler))
+		mux.Handle(kicktemp.MCPPath, maxBytesHandler(5<<20, mcpHandler))
 	}
 
 	// Create HTTP server

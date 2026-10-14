@@ -79,7 +79,7 @@ func TestMCPRequestLogDoesNotContainToolArguments(t *testing.T) {
 		func(_ context.Context, _ *mcp.CallToolRequest, in map[string]any) (*mcp.CallToolResult, fakeTagOut, error) {
 			return nil, fakeTagOut{}, nil
 		})
-	cfg := &kicktemp.Config{AllowAllContainers: true}
+	cfg := &kicktemp.Config{AllowWrite: true, AllowAllContainers: true}
 	server.AddReceivingMiddleware(kicktemp.NewGate(cfg, kicktemp.NewAllowlist(cfg), nil, nil).Middleware())
 	server.AddReceivingMiddleware(middleware.NewLoggingMiddleware(logger))
 	st, ct := mcp.NewInMemoryTransports()

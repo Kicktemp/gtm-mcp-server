@@ -12,8 +12,10 @@ import (
 // Allowed reports whether a tool category is enabled by the configuration.
 func (c *Config) Allowed(cat Category) bool {
 	switch cat {
-	case CategoryRead, CategoryWrite:
+	case CategoryRead:
 		return true
+	case CategoryWrite:
+		return c.AllowWrite
 	case CategoryPublish:
 		return c.AllowPublish
 	case CategoryDelete:
@@ -29,6 +31,8 @@ func (c *Config) Allowed(cat Category) bool {
 // flagFor names the environment variable that would enable a category.
 func flagFor(cat Category) string {
 	switch cat {
+	case CategoryWrite:
+		return "GTM_WRITE_ENABLED"
 	case CategoryPublish:
 		return "KT_ALLOW_PUBLISH"
 	case CategoryDelete:

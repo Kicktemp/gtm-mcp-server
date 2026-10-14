@@ -16,6 +16,10 @@ import (
 // Every invalid value is an error: the server must not start with a policy it
 // could not parse.
 type Config struct {
+	// AllowWrite enables the plain write category: create/update of
+	// workspaces, tags, triggers, variables, versions, ... (GTM_WRITE_ENABLED,
+	// default false). Reads always stay available.
+	AllowWrite bool
 	// AllowPublish enables the publish category (KT_ALLOW_PUBLISH).
 	AllowPublish bool
 	// AllowDelete enables the delete category (KT_ALLOW_DELETE).
@@ -42,8 +46,15 @@ type Config struct {
 	AllowedEmails []string
 
 	// ListenAddr is the HTTP listen address (KT_LISTEN_ADDR). Empty means
-	// 127.0.0.1 on the upstream PORT.
+	// ListenHost on the upstream PORT.
 	ListenAddr string
+	// ListenHost is the interface to bind on PORT when ListenAddr is empty
+	// (KT_LISTEN_HOST, default 127.0.0.1; containers set 0.0.0.0).
+	ListenHost string
+
+	// AuthToken is the bearer token from MCP_AUTH_TOKEN, the stack-wide name
+	// for SERVICE_ACCOUNT_API_KEY.
+	AuthToken string
 
 	// ServiceAccountKeyFile is a file holding the service-account JSON key
 	// (GOOGLE_SERVICE_ACCOUNT_KEY_FILE), e.g. a Docker secret.
@@ -65,6 +76,9 @@ type Config struct {
 func Load(getenv func(string) string) (*Config, error) {
 	cfg := &Config{}
 	var err error
+	if cfg.AllowWrite, err = envBool(getenv, "GTM_WRITE_ENABLED", false); err != nil {
+		return nil, err
+	}
 	if cfg.AllowPublish, err = envBool(getenv, "KT_ALLOW_PUBLISH", false); err != nil {
 		return nil, err
 	}
@@ -80,8 +94,18 @@ func Load(getenv func(string) string) (*Config, error) {
 	if cfg.OAuthEnabled, err = envBool(getenv, "KT_OAUTH_ENABLED", false); err != nil {
 		return nil, err
 	}
-	if cfg.AllowAllContainers, cfg.AllowedContainers, err = parseContainers(getenv("KT_ALLOWED_CONTAINERS")); err != nil {
+	rawContainers, err := aliasEnv(getenv, "KT_ALLOWED_CONTAINERS", "GTM_ALLOWLIST")
+	if err != nil {
 		return nil, err
+	}
+	if cfg.AllowAllContainers, cfg.AllowedContainers, err = parseContainers(rawContainers); err != nil {
+		return nil, err
+	}
+	if cfg.AuthToken, err = aliasEnv(getenv, "SERVICE_ACCOUNT_API_KEY", "MCP_AUTH_TOKEN"); err != nil {
+		return nil, err
+	}
+	if cfg.ListenHost = strings.TrimSpace(getenv("KT_LISTEN_HOST")); cfg.ListenHost == "" {
+		cfg.ListenHost = "127.0.0.1"
 	}
 	for _, e := range strings.Split(getenv("KT_ALLOWED_EMAILS"), ",") {
 		e = strings.ToLower(strings.TrimSpace(e))
@@ -149,6 +173,29 @@ func parseContainers(raw string) (all bool, ids []string, err error) {
 	return false, ids, nil
 }
 
+// aliasEnv resolves a setting that has a canonical name and a stack alias
+// (e.g. KT_ALLOWED_CONTAINERS / GTM_ALLOWLIST). Setting both to different
+// values is an error: the server must not guess which one is meant.
+func aliasEnv(getenv func(string) string, canonical, alias string) (string, error) {
+	a, b := strings.TrimSpace(getenv(canonical)), strings.TrimSpace(getenv(alias))
+	switch {
+	case a == "":
+		return b, nil
+	case b == "" || a == b:
+		return a, nil
+	}
+	return "", fmt.Errorf("%s and %s are both set with different values: use only one", canonical, alias)
+}
+
+// APIKey returns the bearer key: SERVICE_ACCOUNT_API_KEY, or MCP_AUTH_TOKEN
+// when that is the one set.
+func (c *Config) APIKey(envKey string) string {
+	if envKey != "" {
+		return envKey
+	}
+	return c.AuthToken
+}
+
 func envBool(getenv func(string) string, key string, def bool) (bool, error) {
 	v := strings.TrimSpace(getenv(key))
 	if v == "" {
@@ -161,13 +208,18 @@ func envBool(getenv func(string) string, key string, def bool) (bool, error) {
 	return b, nil
 }
 
-// ListenAddress returns the address to bind: KT_LISTEN_ADDR, or loopback on
-// the given upstream port. The upstream default (all interfaces) is never used.
+// ListenAddress returns the address to bind: KT_LISTEN_ADDR, or KT_LISTEN_HOST
+// (default loopback) on the given upstream port. The upstream default (all
+// interfaces) is never used.
 func (c *Config) ListenAddress(port int) string {
 	if c.ListenAddr != "" {
 		return c.ListenAddr
 	}
-	return net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	host := c.ListenHost
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
 // ListensPublicly reports whether addr binds beyond the loopback interface.

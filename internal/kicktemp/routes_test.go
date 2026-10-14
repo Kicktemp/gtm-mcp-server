@@ -24,6 +24,7 @@ func upstreamMux(logger *slog.Logger) http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", ok("healthy"))
+	mux.HandleFunc("GET /healthz", ok("healthy"))
 	mux.HandleFunc("GET /llms.txt", ok("llms"))
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", ok("meta"))
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", ok("meta"))
@@ -32,7 +33,7 @@ func upstreamMux(logger *slog.Logger) http.Handler {
 	}
 	sa := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "google"})
 	mw := auth.Middleware(auth.NewMemoryTokenStore(), nil, logger, "http://localhost:8080", time.Hour, nil, sa, testKey, time.Hour)
-	mux.Handle("/", mw(ok("mcp")))
+	mux.Handle(kicktemp.MCPPath, mw(ok("mcp")))
 	return mux
 }
 
@@ -53,10 +54,12 @@ func TestRouteGuardOAuthOff(t *testing.T) {
 		code                 int
 	}{
 		{"GET", "/health", "", 200},
-		{"POST", "/", "", 401},                       // no bearer
-		{"POST", "/", "wrong-key", 401},              // wrong bearer
-		{"POST", "/", testKey[:len(testKey)-1], 401}, // almost right
-		{"POST", "/", testKey, 200},
+		{"GET", "/healthz", "", 200},
+		{"POST", "/mcp", "", 401},                       // no bearer
+		{"POST", "/mcp", "wrong-key", 401},              // wrong bearer
+		{"POST", "/mcp", testKey[:len(testKey)-1], 401}, // almost right
+		{"POST", "/mcp", testKey, 200},
+		{"POST", "/", testKey, 404}, // the old root endpoint is gone
 		{"GET", "/authorize", "", 404},
 		{"GET", "/authorize", testKey, 404},
 		{"GET", "/oauth/callback", "", 404},
@@ -65,7 +68,6 @@ func TestRouteGuardOAuthOff(t *testing.T) {
 		{"GET", "/.well-known/oauth-protected-resource", "", 404},
 		{"GET", "/.well-known/oauth-authorization-server", "", 404},
 		{"GET", "/llms.txt", "", 404},
-		{"POST", "/mcp", testKey, 404},
 		{"GET", "/anything/else", testKey, 404},
 	}
 	for _, tc := range cases {
@@ -78,7 +80,7 @@ func TestRouteGuardOAuthOff(t *testing.T) {
 func TestRouteGuardOAuthOn(t *testing.T) {
 	h := (&kicktemp.Config{OAuthEnabled: true}).RouteGuard(upstreamMux(slog.New(slog.NewTextHandler(io.Discard, nil))))
 	for path, want := range map[string]int{
-		"/health": 200, "/authorize": 200, "/oauth/callback": 200,
+		"/health": 200, "/healthz": 200, "/authorize": 200, "/oauth/callback": 200,
 		"/.well-known/oauth-protected-resource": 200, "/.well-known/oauth-authorization-server": 200,
 		"/llms.txt": 404, "/other": 404,
 	} {
@@ -102,7 +104,7 @@ func TestCheckAuth(t *testing.T) {
 		wantErr string
 		emails  []string
 	}{
-		{"default without key: no open mode", false, "", false, "SERVICE_ACCOUNT_API_KEY is required", nil},
+		{"default without key: no open mode", false, "", false, "is required", nil},
 		{"short key", false, "short", false, "too short", nil},
 		{"31 bytes", false, strings.Repeat("a", 31), false, "too short", nil},
 		{"32 bytes ok", false, strings.Repeat("a", 32), false, "", nil},
