@@ -154,7 +154,7 @@ func TestAuditCountsRequestsMadeDuringACall(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	cfg := &kicktemp.Config{AllowAllContainers: true}
+	cfg := &kicktemp.Config{AllowWrite: true, AllowAllContainers: true}
 	logPath := t.TempDir() + "/a.jsonl"
 	audit, err := kicktemp.OpenAudit(logPath)
 	if err != nil {

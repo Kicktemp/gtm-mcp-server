@@ -46,7 +46,7 @@ func allowSession(t *testing.T, allowed ...string) *mcp.ClientSession {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
-	cfg := &kicktemp.Config{AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowCustomCode: true, AllowedContainers: allowed}
+	cfg := &kicktemp.Config{AllowWrite: true, AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowCustomCode: true, AllowedContainers: allowed}
 	allow := kicktemp.NewAllowlist(cfg)
 	if err := allow.InitWithLister(ctx, &fakeLister{}); err != nil {
 		t.Fatal(err)
@@ -212,7 +212,7 @@ func TestAllowlistResources(t *testing.T) {
 }
 
 func TestAllowlistInitFailsForUnknownPublicID(t *testing.T) {
-	cfg := &kicktemp.Config{AllowedContainers: []string{"GTM-AAAA1", "GTM-ZZZZ9"}}
+	cfg := &kicktemp.Config{AllowWrite: true, AllowedContainers: []string{"GTM-AAAA1", "GTM-ZZZZ9"}}
 	err := kicktemp.NewAllowlist(cfg).InitWithLister(context.Background(), &fakeLister{})
 	if err == nil || !strings.Contains(err.Error(), "GTM-ZZZZ9") {
 		t.Fatalf("expected startup error naming GTM-ZZZZ9, got %v", err)
@@ -222,7 +222,7 @@ func TestAllowlistInitFailsForUnknownPublicID(t *testing.T) {
 func TestAllowlistNoExtraRequestsPerCall(t *testing.T) {
 	ctx := context.Background()
 	l := &fakeLister{}
-	cfg := &kicktemp.Config{AllowedContainers: []string{"GTM-AAAA1"}}
+	cfg := &kicktemp.Config{AllowWrite: true, AllowedContainers: []string{"GTM-AAAA1"}}
 	if err := kicktemp.NewAllowlist(cfg).InitWithLister(ctx, l); err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestAllowlistNoExtraRequestsPerCall(t *testing.T) {
 }
 
 func TestIDHygieneAppliesWithWildcard(t *testing.T) {
-	cs := newSession(t, &kicktemp.Config{AllowAllContainers: true}, true)
+	cs := newSession(t, &kicktemp.Config{AllowWrite: true, AllowAllContainers: true}, true)
 	_, refused := call(t, cs, "get_tag", map[string]any{"accountId": "1", "containerId": "100", "workspaceId": "5/../7", "tagId": "1"})
 	if !refused {
 		t.Fatal("malformed IDs must be refused even with KT_ALLOWED_CONTAINERS=*")

@@ -51,7 +51,7 @@ func auditSession(t *testing.T) *auditEnv {
 		env.fetched = append(env.fetched, path)
 		return kicktemp.Entity{Fingerprint: "fp-fetched", Type: "gaawe"}, nil
 	})
-	cfg := &kicktemp.Config{AllowDelete: true, AllowedContainers: []string{"GTM-AAAA1"}}
+	cfg := &kicktemp.Config{AllowWrite: true, AllowDelete: true, AllowedContainers: []string{"GTM-AAAA1"}}
 	allow := kicktemp.NewAllowlist(cfg)
 	if err := allow.InitWithLister(ctx, &fakeLister{}); err != nil {
 		t.Fatal(err)

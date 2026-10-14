@@ -11,6 +11,7 @@ services:
     environment:
       BASE_URL: http://localhost:8080
       KT_OAUTH_ENABLED: "false"
+      GTM_WRITE_ENABLED: "false" # true = create/update tools are registered (see SETUP.md)
       KT_ALLOW_PUBLISH: "false"
       KT_ALLOW_DELETE: "false"
       KT_ALLOW_ADMIN: "false"

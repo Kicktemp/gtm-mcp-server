@@ -11,11 +11,12 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 BASE=${BASE:-http://127.0.0.1:8080}
+MCP="$BASE/mcp"
 SANDBOX=${SANDBOX:-GTM-TNZ2LC8}
 # Alle Container, die list_containers zeigen darf (= KT_ALLOWED_CONTAINERS in docker-compose.yml)
 EXPECTED=${EXPECTED:-GTM-TNZ2LC8,GTM-KVGB2N5L}
-KEY=$(grep '^SERVICE_ACCOUNT_API_KEY=' .env | cut -d= -f2-)
-[ -n "$KEY" ] || { echo "SERVICE_ACCOUNT_API_KEY missing in .env"; exit 2; }
+KEY=${MCP_AUTH_TOKEN:-$(grep -E '^(SERVICE_ACCOUNT_API_KEY|MCP_AUTH_TOKEN)=' .env | head -1 | cut -d= -f2-)}
+[ -n "$KEY" ] || { echo "SERVICE_ACCOUNT_API_KEY / MCP_AUTH_TOKEN missing (env or .env)"; exit 2; }
 
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf '  \033[32mPASS\033[0m %s\n' "$1"; }
@@ -31,7 +32,7 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 ID=10
 
 rpc() { # rpc '<json>' -> prints the JSON-RPC message from the SSE stream
-  curl -s "${HDR[@]}" "${AUTH[@]}" ${SID:+-H "Mcp-Session-Id: $SID"} -X POST "$BASE/" -d "$1" | sed -n 's/^data: //p'
+  curl -s "${HDR[@]}" "${AUTH[@]}" ${SID:+-H "Mcp-Session-Id: $SID"} -X POST "$MCP" -d "$1" | sed -n 's/^data: //p'
 }
 tool() { # tool <name> '<arguments json>' -> prints the tool result text (JSON); exit status 1 if the tool returned an error
   ID=$((ID+1))
@@ -46,16 +47,18 @@ jget() { printf '%s' "$1" | py "print($2)"; }
 # --- 1. HTTP surface ---------------------------------------------------------
 section "HTTP: Auth und Routen"
 check "GET /health ohne Auth" "$(code $BASE/health)" 200
-check "ohne Bearer -> 401" "$(code -X POST $BASE/)" 401
-check "falscher Bearer -> 401" "$(code -X POST -H 'Authorization: Bearer wrong' $BASE/)" 401
-check "Bearer mit letztem Zeichen falsch -> 401" "$(code -X POST -H "Authorization: Bearer ${KEY%?}0" $BASE/)" 401
-for p in authorize register token llms.txt .well-known/oauth-authorization-server mcp; do
+check "GET /healthz ohne Auth" "$(code $BASE/healthz)" 200
+check "POST / -> 404 (MCP liegt auf /mcp)" "$(code -X POST -H "Authorization: Bearer $KEY" $BASE/)" 404
+check "ohne Bearer -> 401" "$(code -X POST $MCP)" 401
+check "falscher Bearer -> 401" "$(code -X POST -H 'Authorization: Bearer wrong' $MCP)" 401
+check "Bearer mit letztem Zeichen falsch -> 401" "$(code -X POST -H "Authorization: Bearer ${KEY%?}x" $MCP)" 401
+for p in authorize register token llms.txt .well-known/oauth-authorization-server; do
   check "/$p -> 404" "$(code $BASE/$p)" 404
 done
 
 # --- 2. Session + Tool-Liste -------------------------------------------------
 section "MCP: Handshake und Tool-Liste"
-curl -s -D "$TMP/h" "${HDR[@]}" "${AUTH[@]}" -X POST "$BASE/" \
+curl -s -D "$TMP/h" "${HDR[@]}" "${AUTH[@]}" -X POST "$MCP" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"acceptance","version":"1"}}}' >/dev/null
 SID=$(grep -i '^mcp-session-id' "$TMP/h" | awk '{print $2}' | tr -d '\r')
 [ -n "$SID" ] && ok "Session aufgebaut" || { bad "Session aufgebaut"; exit 1; }
@@ -98,9 +101,9 @@ case "$OUT" in *KT_ALLOWED_CONTAINERS*) ok "fremde Container-ID abgelehnt";; *) 
 OUT=$(tool list_tags "{\"accountId\":\"$ACCOUNT\",\"containerId\":\"$CONTAINER\",\"workspaceId\":\"$WS/../../containers/1/workspaces/1\"}"); RC=$?
 case "$OUT" in *"not a valid ID"*) ok "Pfad-Traversal in workspaceId abgelehnt";; *) bad "Pfad-Traversal abgelehnt" "$OUT";; esac
 OUT=$(tool create_tag "{$BASEARGS,\"name\":\"kt-html\",\"type\":\"html\",\"firingTriggerIds\":[\"1\"]}"); RC=$?
-case "$OUT" in *"custom code is disabled"*) ok "Custom-HTML-Tag abgelehnt";; *) bad "Custom-HTML-Tag abgelehnt" "$OUT";; esac
+case "$OUT" in *"custom code is disabled"*|*GTM_WRITE_ENABLED*) ok "Custom-HTML-Tag abgelehnt";; *) bad "Custom-HTML-Tag abgelehnt" "$OUT";; esac
 OUT=$(tool create_variable "{$BASEARGS,\"name\":\"kt-js\",\"type\":\"jsm\"}"); RC=$?
-case "$OUT" in *"custom code is disabled"*) ok "Custom-JavaScript-Variable abgelehnt";; *) bad "jsm-Variable abgelehnt" "$OUT";; esac
+case "$OUT" in *"custom code is disabled"*|*GTM_WRITE_ENABLED*) ok "Custom-JavaScript-Variable abgelehnt";; *) bad "jsm-Variable abgelehnt" "$OUT";; esac
 OUT=$(tool publish_version "{\"accountId\":\"$ACCOUNT\",\"containerId\":\"$CONTAINER\",\"versionId\":\"1\",\"confirm\":true}"); RC=$?
 case "$OUT" in *KT_ALLOW_PUBLISH*|*"unknown tool"*|*Unknown*) ok "publish_version nicht ausfuehrbar";; *) bad "publish_version nicht ausfuehrbar" "$OUT";; esac
 

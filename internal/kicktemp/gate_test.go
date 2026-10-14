@@ -59,7 +59,7 @@ func listNames(t *testing.T, cs *mcp.ClientSession) map[string]bool {
 }
 
 func TestEveryRegisteredToolIsClassified(t *testing.T) {
-	cs := newSession(t, &kicktemp.Config{AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowCustomCode: true, AllowAllContainers: true}, false)
+	cs := newSession(t, &kicktemp.Config{AllowWrite: true, AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowCustomCode: true, AllowAllContainers: true}, false)
 	registered := listNames(t, cs)
 	if len(registered) != 94 {
 		t.Fatalf("registered tools = %d, want 94 (update categories.go after upstream changes)", len(registered))
@@ -78,7 +78,7 @@ func TestEveryRegisteredToolIsClassified(t *testing.T) {
 
 func TestDefaultPolicyHidesPublishDeleteAdmin(t *testing.T) {
 	for _, filter := range []bool{true, false} {
-		cs := newSession(t, &kicktemp.Config{AllowAllContainers: true}, filter)
+		cs := newSession(t, &kicktemp.Config{AllowWrite: true, AllowAllContainers: true}, filter)
 		names := listNames(t, cs)
 		for _, want := range []string{"list_tags", "create_tag", "update_tag", "create_version"} {
 			if !names[want] {
@@ -97,6 +97,36 @@ func TestDefaultPolicyHidesPublishDeleteAdmin(t *testing.T) {
 	}
 }
 
+func TestWriteToolsNeedGTMWriteEnabled(t *testing.T) {
+	writes := []string{"create_tag", "update_tag", "create_workspace", "create_version", "create_trigger", "create_variable"}
+	for _, filter := range []bool{true, false} {
+		cs := newSession(t, &kicktemp.Config{AllowAllContainers: true}, filter) // AllowWrite=false (default)
+		names := listNames(t, cs)
+		if !names["list_tags"] || !names["list_accounts"] {
+			t.Errorf("filter=%v: read tools must stay available without GTM_WRITE_ENABLED", filter)
+		}
+		if filter {
+			for _, w := range writes {
+				if names[w] {
+					t.Errorf("filter=true: %s must not be registered without GTM_WRITE_ENABLED", w)
+				}
+			}
+		}
+		for _, w := range writes {
+			res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: w, Arguments: map[string]any{}})
+			if err != nil {
+				continue // the filtered server may reject unknown tools at protocol level
+			}
+			if !res.IsError {
+				t.Fatalf("filter=%v %s: write call was not refused", filter, w)
+			}
+			if text := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(text, "GTM_WRITE_ENABLED") {
+				t.Errorf("filter=%v %s: refusal must name GTM_WRITE_ENABLED, got %q", filter, w, text)
+			}
+		}
+	}
+}
+
 func TestDeniedCallIsRefused(t *testing.T) {
 	cases := map[string]string{
 		"publish_version":     "KT_ALLOW_PUBLISH",
@@ -106,7 +136,7 @@ func TestDeniedCallIsRefused(t *testing.T) {
 		"some_future_tool_xy": "KT_ALLOW_ADMIN", // unknown tools are admin
 	}
 	for _, filter := range []bool{true, false} {
-		cs := newSession(t, &kicktemp.Config{AllowAllContainers: true}, filter)
+		cs := newSession(t, &kicktemp.Config{AllowWrite: true, AllowAllContainers: true}, filter)
 		for tool, flag := range cases {
 			res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: tool, Arguments: map[string]any{}})
 			if err != nil {
@@ -124,7 +154,7 @@ func TestDeniedCallIsRefused(t *testing.T) {
 }
 
 func TestAllowedCategoriesAreListedAndCallable(t *testing.T) {
-	cs := newSession(t, &kicktemp.Config{AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowAllContainers: true}, true)
+	cs := newSession(t, &kicktemp.Config{AllowWrite: true, AllowPublish: true, AllowDelete: true, AllowAdmin: true, AllowAllContainers: true}, true)
 	names := listNames(t, cs)
 	for _, want := range []string{"publish_version", "delete_tag", "combine_containers"} {
 		if !names[want] {
@@ -144,7 +174,7 @@ func TestLoadConfig(t *testing.T) {
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 
 	cfg, err := kicktemp.Load(env(nil))
-	if err != nil || cfg.AllowPublish || cfg.AllowDelete || cfg.AllowAdmin {
+	if err != nil || cfg.AllowWrite || cfg.AllowPublish || cfg.AllowDelete || cfg.AllowAdmin {
 		t.Fatalf("defaults must all be false, got %+v err=%v", cfg, err)
 	}
 	cfg, err = kicktemp.Load(env(map[string]string{"KT_ALLOW_PUBLISH": "true", "KT_ALLOW_DELETE": " 1 "}))
